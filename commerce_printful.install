@@ -1,0 +1,14 @@
+<?php
+
+/**
+ * Implements hook_uninstall().
+ */
+function commerce_printful_uninstall() {
+  $vars = array(
+    'commerce_printful_api_key',
+  );
+
+  foreach ($vars as $var) {
+    variable_del($var);
+  }
+}

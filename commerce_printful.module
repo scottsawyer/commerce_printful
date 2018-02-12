@@ -1,0 +1,60 @@
+<?php
+
+// Use the class 4 autoloder to load classes as they are called.
+// require_once libraries_get_path('printful') . '/php-api-sdk/vendor/autoload.php';
+
+/**
+ * Implements hook_libraries_info().
+ */
+function commerce_printful_libraries_info() {
+  $libraries['printful'] = array(
+    'name' => 'Printful API',
+    'vendor url' => 'https://www.printful.com',
+    'download url' => 'https://github.com/printful/php-api-sdk/archive/master.zip',
+    'version callback' => 'commerce_printful_version_callback',
+    'files' => array(
+      'php' => array(
+        'php-api-sdk/src/PrintfulApiClient.php',
+        'php-api-sdk/src/PrintfulOrder.php',
+        'php-api-sdk/src/Exceptions/PrintfulApiException.php',
+        'php-api-sdk/src/Exceptions/PrintfulException.php',
+      ),
+    ),
+  );
+  return $libraries;
+}
+
+/**
+ * Call-back function to bypass missing version.
+ */
+function commerce_printful_version_callback() {
+  return TRUE;
+}
+
+/**
+ * Implements hook_menu().
+ */
+function commerce_printful_menu() {
+  $items = array();
+  $items['admin/config/services/printful'] = array(
+    'title' => 'Printful API',
+    'description' => 'Configure the Printful API integration.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('commerce_printful_admin_settings'),
+    'access arguments' => array('administer commerce printful'),
+    'file' => 'commerce_printful.admin.inc',
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function commerce_printful_permission() {
+  $perms = array();
+  $perms['administer commerce printful'] = array(
+    'title' => t('Administer Printful API'),
+  );
+  return $perms;
+}

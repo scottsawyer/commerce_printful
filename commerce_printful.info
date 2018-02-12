@@ -1,0 +1,10 @@
+name = Commerce Printful
+description = Intergrates Drupal Commerce with Printful.
+core = 7.x
+
+dependencies[] = libraries
+dependencies[] = entity (>=1.6)
+dependencies[] = commerce
+
+package = Commerce (contrib)
+configure = admin/config/services/printful
