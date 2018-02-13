@@ -1,35 +1,8 @@
 <?php
 
-// Use the class 4 autoloder to load classes as they are called.
-// require_once libraries_get_path('printful') . '/php-api-sdk/vendor/autoload.php';
-
-/**
- * Implements hook_libraries_info().
- */
-function commerce_printful_libraries_info() {
-  $libraries['printful'] = array(
-    'name' => 'Printful API',
-    'vendor url' => 'https://www.printful.com',
-    'download url' => 'https://github.com/printful/php-api-sdk/archive/master.zip',
-    'version callback' => 'commerce_printful_version_callback',
-    'files' => array(
-      'php' => array(
-        'php-api-sdk/src/PrintfulApiClient.php',
-        'php-api-sdk/src/PrintfulOrder.php',
-        'php-api-sdk/src/Exceptions/PrintfulApiException.php',
-        'php-api-sdk/src/Exceptions/PrintfulException.php',
-      ),
-    ),
-  );
-  return $libraries;
-}
-
-/**
- * Call-back function to bypass missing version.
- */
-function commerce_printful_version_callback() {
-  return TRUE;
-}
+use Printful\Exceptions\PrintfulApiException;
+use Printful\Exceptions\PrintfulException;
+use Printful\PrintfulApiClient;
 
 /**
  * Implements hook_menu().

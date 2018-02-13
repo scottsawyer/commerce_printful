@@ -25,7 +25,6 @@ function commerce_printful_drush_command() {
  * Logic for the test command.
  */
 function drush_commerce_printful_printful_test() {
-  require_once libraries_get_path('printful') . '/php-api-sdk/vendor/autoload.php';
   $pf = new PrintfulApiClient(drush_commerce_printful_get_key());
   try {
     $store = $pf->get('store');
@@ -42,7 +41,6 @@ function drush_commerce_printful_printful_test() {
  * Logic for the sync products command.
  */
 function drush_commerce_printful_printful_sync_products() {
-  require_once libraries_get_path('printful') . '/php-api-sdk/vendor/autoload.php';
   $pf = new PrintfulApiClient(drush_commerce_printful_get_key());
   try {
 
