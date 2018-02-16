@@ -4,11 +4,105 @@
  * Implements hook_uninstall().
  */
 function commerce_printful_uninstall() {
+  // Remove variables.
   $vars = array(
     'commerce_printful_api_key',
   );
-
   foreach ($vars as $var) {
     variable_del($var);
+  }
+
+  // Remove the printful product display nodes and content type.
+  $sql = 'SELECT nid FROM {node} WHERE type = :type';
+  $result = db_query($sql, array(':type' => 'printful'));
+  $nids = array();
+  foreach ($result as $row) {
+    $nids[] = $row->nid;
+  }
+  node_delete_multiple($nids);
+
+  foreach (field_info_instances('node', 'printful') as $instance) {
+    field_delete_instance($instance);
+  }
+
+  // Remove the content type.
+  node_type_delete('printful');
+
+  // Field clean up.
+  field_purge_batch(1000);
+
+  // Remove all the printful products.
+  $sql = 'SELECT product_id FROM {commerce_product} WHERE type = :type';
+  $result = db_query($sql, array(':type' => 'printful'));
+  $product_ids = array();
+  foreach ($result as $row) {
+    $product_ids[] = $row->product_id;
+  }
+  commerce_product_delete_multiple($product_ids);
+
+  // Remove the printful product type.
+  commerce_product_ui_product_type_delete('printful');
+}
+
+/**
+ * Implements hook_install().
+ */
+function commerce_printful_install() {
+  $t = get_t();
+
+  // Create the printful product type.
+  $product_type = commerce_product_ui_product_type_new();
+
+  $product_type['type'] = 'printful';
+  $product_type['name'] = $t('Printful');
+  $product_type['description'] = '';
+  $product_type['is_new'] = TRUE;
+
+  commerce_product_ui_product_type_save($product_type, FALSE);
+
+  $printful = array(
+    'type' => 'printful',
+    'name' => $t('Printful'),
+    'base' => 'node_content',
+  );
+  $content_type = node_type_set_defaults($printful);
+
+  // Create a custom Field with our required field-type.
+  $field = array(
+    'field_printful_products' => array (
+      'field_name' => 'field_printful_products',
+      'type' => 'commerce_product_reference',
+      'cardinality' => -1,
+    ),
+  );
+  foreach ($field as $fields) {
+    field_create_field($fields);
+  }
+
+  // Create instances.
+  $instance = array(
+    'field_printful_products' => array (
+      'field_name' => 'field_printful_products',
+      'entity_type' => 'node',
+      'bundle' => 'printful',
+      'label' => $t('Printful products'),
+      'widget' => array('type' => 'commerce_product_reference_autocomplete'),
+    ),
+  );
+
+  foreach ($instance as $fieldinstance) {
+   field_create_instance($fieldinstance);
+  }
+
+  $status = node_type_save($content_type);
+  node_add_body_field($content_type);
+
+  $t_args = array('%name' => $content_type->name);
+  if ($status == SAVED_UPDATED) {
+    drupal_set_message($t('The content type %name has been updated.', $t_args));
+  } 
+  elseif ($status == SAVED_NEW) {
+    drupal_set_message($t('The content type %name has been added.', $t_args));
+    watchdog('node', 'Added content type %name.', $t_args, WATCHDOG_NOTICE, l($t('view'), 'admin/structure/types')); 
   }
 }

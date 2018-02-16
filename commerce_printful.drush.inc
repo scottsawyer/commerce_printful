@@ -70,7 +70,7 @@ function drush_commerce_printful_printful_sync_products() {
         $commerce_product = commerce_product_load_by_sku($sku);
         if (!$commerce_product) {
           drush_print('Creating new product.');
-          $wrapper = entity_metadata_wrapper('commerce_product', commerce_product_new('product'));
+          $wrapper = entity_metadata_wrapper('commerce_product', commerce_product_new('printful'));
 
           // The SKU title is a concatenation of the Product
           // and Variant names.
@@ -101,6 +101,7 @@ function drush_commerce_printful_printful_sync_products() {
       // Create a product display node if needed.
       $has_display = (new EntityFieldQuery())
         ->entityCondition('entity_type', 'node')
+        ->propertyCondition('type', 'printful')
         ->propertyCondition('title', $product['name'])
         ->count()
         ->execute();
@@ -108,21 +109,12 @@ function drush_commerce_printful_printful_sync_products() {
       if (!$has_display) {
         // Create the new product display.
         drush_print('Creating new product display.');
-        $node = entity_create('node', array('type' => 'product_display'));
+        $node = entity_create('node', array('type' => 'printful'));
         $node->uid = 1;
         $node_wrapper = entity_metadata_wrapper('node', $node);
         $node_wrapper->status = 0;
         $node_wrapper->title = $product['name'];
-        $node_wrapper->field_products = $product_ids;
-
-        // Below are some non-standard fields for the author's
-        // site. They are left here as examples.
-
-        // Look up the product type.
-        $product_type_term = taxonomy_get_term_by_name('Product', 'product_types');
-        $node_wrapper->field_product_type = reset(array_keys($product_type_term));
-
-        $node_wrapper->field_sort = 0;
+        $node_wrapper->field_printful_products = $product_ids;
 
         $node_wrapper->save();
       }
