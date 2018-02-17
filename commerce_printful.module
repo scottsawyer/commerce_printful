@@ -122,3 +122,108 @@ function commerce_printful_checkout_validate($form, &$form_state) {
   }
 
 }
+
+/**
+ * Implements hook_default_rules_configuration().
+ */
+function commerce_printful_default_rules_configuration() {
+  $configs = array();
+  $rule = '{ "rules_printful_shipping" : {
+    "LABEL" : "Printful shipping",
+    "PLUGIN" : "reaction rule",
+    "OWNER" : "rules",
+    "REQUIRES" : [ "rules", "commerce_printful", "commerce_shipping" ],
+    "ON" : { "commerce_shipping_calculate_rate" : [] },
+    "IF" : [
+      { "data_is" : { "data" : [ "commerce-line-item:type" ], "value" : "shipping" } }
+    ],
+    "DO" : [
+      { "commerce_printful_add_printful_shipping_costs" : { "commerce_line_item" : [ "commerce_line_item" ] } }
+    ]
+  }
+}';
+  $configs['rules_printful_shipping'] = rules_import($rule);
+  return $configs;
+}
+
+/**
+ * Helper function to determine if order contains Printful items.
+ */
+function commerce_printful_is_printful_order($order) {
+  $has_printful = FALSE;
+  if ($order) {
+    $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+    foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+      $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
+      if ($product->type == 'printful') {
+        $has_printful = TRUE;
+        last;
+      }
+    }
+  }
+  return $has_printful;
+}
+
+/**
+ * Helper function to get Printful shipping info for an order.
+ */
+function commerce_printful_get_printful_shipping($order) {
+  $printful_shipping = array();
+
+  if ($order) {
+    $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
+    foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+      // Check for Printful product types.
+      if ($line_item_wrapper->commerce_product->type->value() == 'printful') {
+
+        // Load the product object.
+        $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
+
+        // Get the Printful product_id and variant_id from the SKU.
+        $identifiers = explode('-', $product->sku);
+        $printful_product_id = $identifiers[0];
+        $printful_variant_id = $identifiers[1];
+
+        $printful_items[] = array(
+          'variant_id' => $printful_variant_id,
+          'quantity' => 1,
+          'files' => array(
+            array('url' => 'http://example.com/files/posters/poster_1.jpg'),
+          ),
+        );
+
+      }
+    }
+
+    $shipping_address = $order_wrapper->commerce_customer_shipping->commerce_customer_address->value();
+    $currency = $order_wrapper->commerce_order_total->currency_code->value();
+
+    // Prepare the Printful order request.
+    $request = array(
+      'recipient' => array(
+        'name' => $shipping_address['name_line'],
+        'address1' => $shipping_address['thoroughfare'],
+        'city' => $shipping_address['locality'],
+        'state_code' => $shipping_address['administrative_area'],
+        'country_code' => $shipping_address['country'],
+        'zip' => $shipping_address['postal_code'],
+      ),
+      'items' => $printful_items,
+      'currency' => $currency,
+    );
+
+    $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
+
+    try {
+      $printful_shipping = $pf->post('shipping/rates', $request);
+    } catch (PrintfulApiException $e) {
+      watchdog('commerce_printful', 'Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
+    } catch (PrintfulException $e) {
+      watchdog('commerce_printful', 'Printful Exception: ' . $e->getMessage());
+      watchdog('commerce_printful', $pf->getLastResponseRaw());
+    }
+  }
+
+  return $printful_shipping;
+}

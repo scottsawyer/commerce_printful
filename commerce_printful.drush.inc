@@ -162,18 +162,8 @@ function drush_commerce_printful_printful_order_test() {
     if ($order) {
       $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
 
-      // Check the cart for a Printful item.
-      $has_printful = FALSE;
-      foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
-        $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
-        if ($product->type == 'printful') {
-          $has_printful = TRUE;
-          last;
-        }
-      }
-
-      // Add a Printful item to the cart.
-      if (!$has_printful) {
+      // Add a Printful item to the cart .
+      if (!commerce_printful_is_printful_order($order)) {
         // Get the product object.
         $product_id = reset(array_keys($results['commerce_product']));
         $product = commerce_product_load($product_id);
