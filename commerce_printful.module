@@ -31,3 +31,94 @@ function commerce_printful_permission() {
   );
   return $perms;
 }
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function commerce_printful_form_commerce_checkout_form_checkout_alter(&$form, &$form_state, $form_id) {
+  $form['buttons']['continue']['#validate'][] = 'commerce_printful_checkout_validate';
+}
+
+/**
+ * Validation callback function to handle initial communication with Printful.
+ *
+ * This function creates the draft order in Printful.
+ *
+ */
+function commerce_printful_checkout_validate($form, &$form_state) {
+
+  global $user;
+
+  $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
+  $printful_order = NULL;
+
+  $order = commerce_cart_order_load($user->uid);
+  if ($order) {
+    $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
+    // Check Printful to see if this order exists.
+    try {
+      $printful_order = $pf->get('orders/@' . $order->order_id);
+    } catch (PrintfulApiException $e) {
+    } catch (PrintfulException $e) {
+    }
+
+    if (!$printful_order) {
+
+      // Prepare the Printful items.
+      $printful_items = array();
+
+      foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+        // Check for Printful product types.
+        if ($line_item_wrapper->commerce_product->type->value() == 'printful') {
+
+          // Load the product object.
+          $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
+
+          // Get the Printful product_id and variant_id from the SKU.
+          $identifiers = explode('-', $product->sku);
+          $printful_product_id = $identifiers[0];
+          $printful_variant_id = $identifiers[1];
+
+          $printful_items[] = array(
+            'variant_id' => $printful_variant_id,
+            'quantity' => 1,
+            'files' => array(
+              array('url' => 'http://example.com/files/posters/poster_1.jpg'),
+            ),
+          );
+
+        }
+      }
+
+      $shipping_address = $order_wrapper->commerce_customer_shipping->commerce_customer_address->value();
+
+      // Prepare the Printful order request.
+      $request = array(
+        'recipient' => array(
+          'name' => $shipping_address['name_line'],
+          'address1' => $shipping_address['thoroughfare'],
+          'city' => $shipping_address['locality'],
+          'state_code' => $shipping_address['administrative_area'],
+          'country_code' => $shipping_address['country'],
+          'zip' => $shipping_address['postal_code'],
+        ),
+        'items' => $printful_items,
+        'external_id' => $order->order_id,
+      );
+
+      try {
+        $printful_order = $pf->post('orders', $request);
+      } catch (PrintfulApiException $e) {
+        form_set_error('', 'Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
+        return FALSE;
+      } catch (PrintfulException $e) {
+        form_set_error('', 'Printful Exception: ' . $e->getMessage());
+        form_set_error('', $pf->getLastResponseRaw());
+        return FALSE;
+      }
+
+    }
+  }
+
+}

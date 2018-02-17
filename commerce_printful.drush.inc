@@ -17,6 +17,10 @@ function commerce_printful_drush_command() {
     'description' => 'Sync Printful products to Drupal Commerce products.',
     'aliases' => ['psp'],
   ];
+  $commands['printful-order-test'] = [
+    'description' => 'Create a test Printful order.',
+    'aliases' => ['pot'],
+  ];
 
   return $commands;
 }
@@ -137,4 +141,111 @@ function drush_commerce_printful_get_key() {
     drush_die('Printful API key missing. Please complete module configuration.');
   }
   return $key;
+}
+
+/**
+ * Logic for the order test command.
+ */
+function drush_commerce_printful_printful_order_test() {
+  $request = array();
+
+  // Look up a Printful item to order.
+  $results = (new EntityFieldQuery())
+    ->entityCondition('entity_type', 'commerce_product')
+    ->propertyCondition('type', 'printful')
+    ->execute();
+
+  if ($results && !empty($results['commerce_product'])) {
+
+    // Create a commerce order.
+    $order = commerce_cart_order_load(1);
+    if ($order) {
+      $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
+      // Check the cart for a Printful item.
+      $has_printful = FALSE;
+      foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+        $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
+        if ($product->type == 'printful') {
+          $has_printful = TRUE;
+          last;
+        }
+      }
+
+      // Add a Printful item to the cart.
+      if (!$has_printful) {
+        // Get the product object.
+        $product_id = reset(array_keys($results['commerce_product']));
+        $product = commerce_product_load($product_id);
+
+        $line_item = commerce_product_line_item_new($product, 1, $order->order_id);
+        commerce_line_item_save($line_item);
+        $order_wrapper->commerce_line_items[] = $line_item;
+        commerce_order_save($order);
+      }
+
+      drush_print('Commerce Order ' . $order->order_id . ' ready.');
+
+      // At this point, we should have an order with at least one Printful item.
+      // Prepare the Printful items array for the API call.
+      $printful_items = array();
+
+      foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+        $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
+        if ($product->type == 'printful') {
+
+          // Get the Printful product_id and variant_id from the SKU.
+          $identifiers = explode('-', $product->sku);
+          $printful_product_id = $identifiers[0];
+          $printful_variant_id = $identifiers[1];
+
+          $printful_items[] = array(
+            'variant_id' => $printful_variant_id,
+            'quantity' => 1,
+            'files' => array(
+              array('url' => 'http://example.com/files/posters/poster_1.jpg'),
+            ),
+          );
+
+        }
+      }
+
+      // Get the shipping address.
+      $shipping_address = $order_wrapper->commerce_customer_shipping->commerce_customer_address->value();
+
+      $recipient_conf = array(
+        'name' => array('name_line', 'John Tester'),
+        'address1' => array('thoroughfare', '2000 Test Street'),
+        'city' => array('locality', 'Huntsville'),
+        'state_code' => array('administrative_area', 'AL'),
+        'country_code' => array('country', 'US'),
+        'zip' => array('postal_code', '35802'),
+      );
+
+      $recipient = array();
+      foreach ($recipient_conf as $k => $v) {
+        $recipient[$k] = !empty($shipping_address[$v[0]]) ? $shipping_address[$v[0]] : $v[1];
+      }
+
+      // Prepare the Printful order request.
+      $request = array(
+        'recipient' => $recipient,
+        'items' => $printful_items,
+      );
+    }
+  }
+
+  if (!empty($request)) {
+    $pf = new PrintfulApiClient(drush_commerce_printful_get_key());
+    try {
+      // Post the order to Printful.
+      $printful_order = $pf->post('orders', $request);
+      drush_print_r($printful_order);
+    } catch (PrintfulApiException $e) {
+      dt('Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
+    } catch (PrintfulException $e) {
+      dt('Printful Exception: ' . $e->getMessage());
+      drush_print_r($pf->getLastResponseRaw());
+    }
+  }
 }

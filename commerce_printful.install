@@ -58,7 +58,7 @@ function commerce_printful_install() {
   $product_type['description'] = '';
   $product_type['is_new'] = TRUE;
 
-  commerce_product_ui_product_type_save($product_type, FALSE);
+  commerce_product_ui_product_type_save($product_type);
 
   $printful = array(
     'type' => 'printful',
