@@ -3,6 +3,9 @@ description = Intergrates Drupal Commerce with Printful.
 core = 7.x
 
 dependencies[] = commerce
+dependencies[] = commerce_order
+dependencies[] = commerce_price
+dependencies[] = commerce_shipping
 dependencies[] = composer_manager
 
 package = Commerce (contrib)
