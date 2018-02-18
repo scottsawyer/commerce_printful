@@ -165,6 +165,19 @@ function commerce_printful_is_printful_order($order) {
 }
 
 /**
+ * Helper function to map Printful shipping IDs to commerce_shipping.
+ */
+function commerce_printful_shipping_map($id) {
+  $map = array(
+    'usps_first_class' => '',
+    'usps_priority_mail' => 'USPS_PRIORITY',
+    'usps_pmi' => '',
+    'usps_express_mail' => '',
+  );
+  return (!empty($map[$id])) ? $map[$id] : FALSE;
+}
+
+/**
  * Helper function to get Printful shipping info for an order.
  */
 function commerce_printful_get_printful_shipping($order) {

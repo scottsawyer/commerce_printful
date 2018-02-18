@@ -5,76 +5,92 @@ use Printful\Exceptions\PrintfulException;
 use Printful\PrintfulApiClient;
 
 /**
- * Implements hook_rules_condition_info().
- */
-function commerce_printful_rules_condition_info() {
-  return array(
-    'commerce_printful_valid_printful_shipping_method' => array(
-      'label' => t('Is valid Printful shipping method'),
-      'group' => t('Commerce Printful'), 
-      'parameter' => array(
-        'commerce_order' => array(
-          'type' => 'commerce_order', 
-          'label' => t('Order'), 
-        ), 
-      ), 
-    ),
-  );
-}
-
-/**
  * Implements hook_rules_action_info().
  */
 function commerce_printful_rules_action_info() {
-  return array(
-    'commerce_printful_add_printful_shipping_costs' => array(
-      'label' => t('Add Printful shipping costs'),
-      'group' => t('Commerce Printful'),
+  $actions = array();
+
+  if (count(commerce_shipping_services()) > 0) {
+    $actions['commerce_printful_service_rate_order'] = array(
+      'label' => t('Add a rate for a shipping service to an order, including Printful costs'),
       'parameter' => array(
-        'commerce_line_item' => array(
-          'type' => 'commerce_line_item',
-          'label' => t('Line item'),
+        'shipping_service_name' => array(
+          'type' => 'text',
+          'label' => t('Shipping service'),
+          'options list' => 'commerce_shipping_service_options_list',
+        ),
+        'commerce_order' => array(
+          'type' => 'commerce_order',
+          'label' => t('Order'),
         ),
       ),
-    ),
-  );
-}
-
-/**
- * Rules condition: the Printful order has a matching shipping method.
- */
-function commerce_printful_valid_printful_shipping_method($order) {
-  if ($order && commerce_printful_is_printful_order($order)) {
-
+      'group' => t('Commerce Printful'),
+    );
   }
-  return TRUE;
+
+  return $actions;
 }
 
 /**
- * Rules action: add Printful shipping amount to the unit price.
+ * Adds a shipping rate to the given order object for the specified service.
+ *
+ * @param string $service
+ *   The machine-name of the shipping service to rate.
+ * @param object $order
+ *   The order for which the shipping service should be rated.
  */
-function commerce_printful_add_printful_shipping_costs($line_item) {
-  $wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+function commerce_printful_service_rate_order($service, $order) {
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  $currency = $order_wrapper->commerce_order_total->currency_code->value();
 
-  $order = commerce_order_load($line_item->order_id);
-  $printful_shipping = commerce_printful_get_printful_shipping($order);
+  // Load the full shipping service info array.
+  $shipping_service = commerce_shipping_service_load($service);
 
-  $shipping_method_map = array(
-    'usps_priority_mail' => 'USPS_PRIORITY',
-  );
+  $skip_service = FALSE;
+  $printful_amount = 0;
 
-  foreach ($printful_shipping as $k => $v) {
-    if ($v['id'] == $shipping_method_map[$wrapper->commerce_shipping_service->value()]) {
+  if (commerce_printful_is_printful_order($order)) {
+    $printful_shipping = commerce_printful_get_printful_shipping($order);
+    $printful_service_id = commerce_printful_shipping_map($service);
 
-      $unit_price = commerce_price_wrapper_value($wrapper, 'commerce_unit_price', TRUE);
-      $current_amount = $unit_price['amount'];
-
-      $printful_amount = commerce_currency_decimal_to_amount($v['rate'], $currency);
-
-      $updated_amount = commerce_round(COMMERCE_ROUND_HALF_UP, $current_amount + $printful_amount);
-
-      $wrapper->commerce_unit_price->amount = $updated_amount;
+    $matches = FALSE;
+    foreach ($printful_shipping as $ps) {
+      if ($ps['id'] == $printful_service_id) {
+        $printful_amount = commerce_currency_decimal_to_amount($ps['rate'], $currency);
+        $matches = TRUE;
+        last;
+      }
+    }
+    if (!$matches) {
+      $skip_service = TRUE;
     }
   }
 
+  if (!$skip_service) {
+    // If the service specifies a rate callback...
+    if ($callback = commerce_shipping_service_callback($shipping_service, 'rate')) {
+      // Get the base rate price for the shipping service.
+      $price = $callback($shipping_service, $order);
+
+      if (!empty($printful_amount)) {
+        $price['amount'] = $price['amount'] + $printful_amount;
+      }
+
+      // If we got a base price...
+      if ($price) {
+        // Create a calculated shipping line item out of it.
+        $line_item = commerce_shipping_service_rate_calculate($service, $price, $order->order_id);
+        $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+
+        // Add the rate to the order as long as it doesn't have
+        // a NULL price amount.
+        if (!is_null($line_item_wrapper->commerce_unit_price->amount->value())) {
+          // Include a weight property on the line item object from the shipping
+          // service for sorting rates.
+          $line_item->weight = empty($shipping_service['weight']) ? 0 : $shipping_service['weight'];
+          $order->shipping_rates[$service] = $line_item;
+        }
+      }
+    }
+  }
 }
