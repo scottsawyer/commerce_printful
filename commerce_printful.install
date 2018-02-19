@@ -67,7 +67,7 @@ function commerce_printful_install() {
   );
   $content_type = node_type_set_defaults($printful);
 
-  // Create a custom Field with our required field-type.
+  // Create the product reference field.
   $field = array(
     'field_printful_products' => array (
       'field_name' => 'field_printful_products',
@@ -79,7 +79,7 @@ function commerce_printful_install() {
     field_create_field($fields);
   }
 
-  // Create instances.
+  // Create the field instance.
   $instance = array(
     'field_printful_products' => array (
       'field_name' => 'field_printful_products',

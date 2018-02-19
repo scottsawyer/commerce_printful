@@ -33,7 +33,7 @@ function commerce_printful_permission() {
 }
 
 /**
- * Helper function to determine if order contains Printful items.
+ * Check an order for Printful items.
  */
 function commerce_printful_is_printful_order($order) {
   $has_printful = FALSE;
@@ -51,7 +51,7 @@ function commerce_printful_is_printful_order($order) {
 }
 
 /**
- * Helper function to map Printful shipping IDs to commerce_shipping.
+ * Map commerce_shipping IDs to Printful IDs.
  */
 function commerce_printful_shipping_map($id) {
   $map = array(
@@ -64,7 +64,7 @@ function commerce_printful_shipping_map($id) {
 }
 
 /**
- * Helper function to get Printful shipping info for an order.
+ * Get Printful shipping rates for an order.
  */
 function commerce_printful_get_printful_shipping($order) {
   $printful_shipping = &drupal_static(__FUNCTION__);
@@ -136,7 +136,7 @@ function commerce_printful_get_printful_shipping($order) {
 }
 
 /**
- * Helper function to get Printful tax rates.
+ * Get Printful tax rates for an order.
  */
 function commerce_printful_tax_rate($order) {
   $tax_rate = &drupal_static(__FUNCTION__);
@@ -178,7 +178,7 @@ function commerce_printful_tax_rate($order) {
 }
 
 /**
- * Helper function to get Printful taxable states.
+ * Get Printful taxable states.
  */
 function commerce_printful_taxable_states() {
   $taxable_states = &drupal_static(__FUNCTION__);
@@ -224,33 +224,6 @@ function commerce_printful_taxable_states() {
 }
 
 /**
- * Helper function to get Printful tax rates.
- */
-function commerce_printful_commerce_tax_calculation_callback($tax_rate, $line_item_wrapper) {
-  if (!is_null($line_item_wrapper->commerce_unit_price->value()) &&
-    !commerce_price_component_load($line_item_wrapper->commerce_unit_price->value(), $tax_rate['price_component'])) {
-
-    $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
-    if ($product->type != 'printful') {
-      return FALSE;
-    }
-
-    $use_this_tax_rate = $tax_rate['rate'] + ( rand(5, 10) / 100 );
-
-    $amount = $line_item_wrapper->commerce_unit_price->amount->value() * $use_this_tax_rate;
-    return array(
-      'amount' => $amount,
-      'currency_code' => $line_item_wrapper->commerce_unit_price->currency_code->value(),
-      'data' => array(
-        'tax_rate' => $tax_rate,
-      ),
-    );
-  }
-
-  return FALSE;
-}
-
-/**
  * Implements hook_commerce_tax_type_calculate_rates().
  */
 function commerce_printful_commerce_tax_type_calculate_rates($tax_type, $line_item) {
@@ -272,6 +245,7 @@ function commerce_printful_commerce_tax_type_calculate_rates($tax_type, $line_it
   $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
   $shipping_address = $order_wrapper->commerce_customer_shipping->commerce_customer_address->value();
 
+  // Do we have the required shipping address values?
   if (empty($shipping_address['administrative_area']) || !in_array($shipping_address['administrative_area'], array_keys($taxable_states))) {
     return;
   }
