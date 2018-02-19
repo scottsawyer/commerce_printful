@@ -33,120 +33,6 @@ function commerce_printful_permission() {
 }
 
 /**
- * Implements hook_form_FORM_ID_alter().
- */
-function commerce_printful_form_commerce_checkout_form_checkout_alter(&$form, &$form_state, $form_id) {
-  $form['buttons']['continue']['#validate'][] = 'commerce_printful_checkout_validate';
-}
-
-/**
- * Validation callback function to handle initial communication with Printful.
- *
- * This function creates the draft order in Printful.
- *
- */
-function commerce_printful_checkout_validate($form, &$form_state) {
-
-  global $user;
-
-  $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
-  $printful_order = NULL;
-
-  $order = commerce_cart_order_load($user->uid);
-  if ($order) {
-    $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
-
-    // Check Printful to see if this order exists.
-    try {
-      $printful_order = $pf->get('orders/@' . $order->order_id);
-    } catch (PrintfulApiException $e) {
-    } catch (PrintfulException $e) {
-    }
-
-    if (!$printful_order) {
-
-      // Prepare the Printful items.
-      $printful_items = array();
-
-      foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
-        // Check for Printful product types.
-        if ($line_item_wrapper->commerce_product->type->value() == 'printful') {
-
-          // Load the product object.
-          $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
-
-          // Get the Printful product_id and variant_id from the SKU.
-          $identifiers = explode('-', $product->sku);
-          $printful_product_id = $identifiers[0];
-          $printful_variant_id = $identifiers[1];
-
-          $printful_items[] = array(
-            'variant_id' => $printful_variant_id,
-            'quantity' => 1,
-            'files' => array(
-              array('url' => 'http://example.com/files/posters/poster_1.jpg'),
-            ),
-          );
-
-        }
-      }
-
-      $shipping_address = $order_wrapper->commerce_customer_shipping->commerce_customer_address->value();
-
-      // Prepare the Printful order request.
-      $request = array(
-        'recipient' => array(
-          'name' => $shipping_address['name_line'],
-          'address1' => $shipping_address['thoroughfare'],
-          'city' => $shipping_address['locality'],
-          'state_code' => $shipping_address['administrative_area'],
-          'country_code' => $shipping_address['country'],
-          'zip' => $shipping_address['postal_code'],
-        ),
-        'items' => $printful_items,
-        'external_id' => $order->order_id,
-      );
-
-      try {
-        $printful_order = $pf->post('orders', $request);
-      } catch (PrintfulApiException $e) {
-        form_set_error('', 'Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
-        return FALSE;
-      } catch (PrintfulException $e) {
-        form_set_error('', 'Printful Exception: ' . $e->getMessage());
-        form_set_error('', $pf->getLastResponseRaw());
-        return FALSE;
-      }
-
-    }
-  }
-
-}
-
-/**
- * Implements hook_default_rules_configuration().
- */
-function commerce_printful_default_rules_configuration() {
-  $configs = array();
-  $rule = '{ "rules_printful_shipping" : {
-    "LABEL" : "Printful shipping",
-    "PLUGIN" : "reaction rule",
-    "OWNER" : "rules",
-    "REQUIRES" : [ "rules", "commerce_printful", "commerce_shipping" ],
-    "ON" : { "commerce_shipping_calculate_rate" : [] },
-    "IF" : [
-      { "data_is" : { "data" : [ "commerce-line-item:type" ], "value" : "shipping" } }
-    ],
-    "DO" : [
-      { "commerce_printful_add_printful_shipping_costs" : { "commerce_line_item" : [ "commerce_line_item" ] } }
-    ]
-  }
-}';
-  $configs['rules_printful_shipping'] = rules_import($rule);
-  return $configs;
-}
-
-/**
  * Helper function to determine if order contains Printful items.
  */
 function commerce_printful_is_printful_order($order) {
@@ -157,7 +43,7 @@ function commerce_printful_is_printful_order($order) {
       $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
       if ($product->type == 'printful') {
         $has_printful = TRUE;
-        last;
+        break;
       }
     }
   }
@@ -181,62 +67,247 @@ function commerce_printful_shipping_map($id) {
  * Helper function to get Printful shipping info for an order.
  */
 function commerce_printful_get_printful_shipping($order) {
-  $printful_shipping = array();
+  $printful_shipping = &drupal_static(__FUNCTION__);
 
-  if ($order) {
-    $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  if (!isset($printful_shipping)) {
+    $printful_shipping = array();
 
-    foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
-      // Check for Printful product types.
-      if ($line_item_wrapper->commerce_product->type->value() == 'printful') {
+    if ($order) {
+      $printful_items = array();
+      $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
 
-        // Load the product object.
-        $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
-
-        // Get the Printful product_id and variant_id from the SKU.
-        $identifiers = explode('-', $product->sku);
-        $printful_product_id = $identifiers[0];
-        $printful_variant_id = $identifiers[1];
-
-        $printful_items[] = array(
-          'variant_id' => $printful_variant_id,
-          'quantity' => 1,
-          'files' => array(
-            array('url' => 'http://example.com/files/posters/poster_1.jpg'),
-          ),
-        );
-
+      $shipping_address = $order_wrapper->commerce_customer_shipping->commerce_customer_address->value();
+      if (empty($shipping_address['administrative_area']) || empty($shipping_address['country']) || empty($shipping_address['postal_code'])) {
+        return $printful_shipping;
       }
-    }
 
-    $shipping_address = $order_wrapper->commerce_customer_shipping->commerce_customer_address->value();
-    $currency = $order_wrapper->commerce_order_total->currency_code->value();
+      foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+        // Check for Printful product types.
+        if ($line_item_wrapper->commerce_product->type->value() == 'printful') {
 
-    // Prepare the Printful order request.
-    $request = array(
-      'recipient' => array(
-        'name' => $shipping_address['name_line'],
-        'address1' => $shipping_address['thoroughfare'],
-        'city' => $shipping_address['locality'],
-        'state_code' => $shipping_address['administrative_area'],
-        'country_code' => $shipping_address['country'],
-        'zip' => $shipping_address['postal_code'],
-      ),
-      'items' => $printful_items,
-      'currency' => $currency,
-    );
+          // Load the product object.
+          $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
 
-    $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
+          // Get the Printful product_id and variant_id from the SKU.
+          $identifiers = explode('-', $product->sku);
+          $printful_product_id = $identifiers[0];
+          $printful_variant_id = $identifiers[1];
 
-    try {
-      $printful_shipping = $pf->post('shipping/rates', $request);
-    } catch (PrintfulApiException $e) {
-      watchdog('commerce_printful', 'Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
-    } catch (PrintfulException $e) {
-      watchdog('commerce_printful', 'Printful Exception: ' . $e->getMessage());
-      watchdog('commerce_printful', $pf->getLastResponseRaw());
+          $printful_items[] = array(
+            'variant_id' => $printful_variant_id,
+            'quantity' => 1,
+            'files' => array(
+              array('url' => 'http://example.com/files/posters/poster_1.jpg'),
+            ),
+          );
+        }
+      }
+
+      $currency_code = $order_wrapper->commerce_order_total->currency_code->value();
+
+      // Prepare the Printful order request.
+      $request = array(
+        'recipient' => array(
+          'name' => $shipping_address['name_line'],
+          'address1' => $shipping_address['thoroughfare'],
+          'city' => $shipping_address['locality'],
+          'state_code' => $shipping_address['administrative_area'],
+          'country_code' => $shipping_address['country'],
+          'zip' => $shipping_address['postal_code'],
+        ),
+        'items' => $printful_items,
+        'currency' => $currency_code,
+      );
+
+      $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
+
+      try {
+        $printful_shipping = $pf->post('shipping/rates', $request);
+      } catch (PrintfulApiException $e) {
+        watchdog('commerce_printful', 'Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
+      } catch (PrintfulException $e) {
+        watchdog('commerce_printful', 'Printful Exception: ' . $e->getMessage());
+        watchdog('commerce_printful', $pf->getLastResponseRaw());
+      }
     }
   }
 
   return $printful_shipping;
+}
+
+/**
+ * Helper function to get Printful tax rates.
+ */
+function commerce_printful_tax_rate($order) {
+  $tax_rate = &drupal_static(__FUNCTION__);
+
+  if (!isset($tax_rate)) {
+    $tax_rate = array();
+
+    if ($order && commerce_printful_is_printful_order($order)) {
+
+      $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
+
+      $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+      $shipping_address = $order_wrapper->commerce_customer_shipping->commerce_customer_address->value();
+
+      if (!empty($shipping_address['administrative_area']) && !empty($shipping_address['postal_code']) && !empty($shipping_address['country'])) {
+
+        $request = array(
+          'recipient' => array(
+            'state_code' => $shipping_address['administrative_area'],
+            'country_code' => $shipping_address['country'],
+            'zip' => $shipping_address['postal_code'],
+          ),
+        );
+
+        try {
+          $tax_rate = $pf->post('tax/rates', $request);
+        } catch (PrintfulApiException $e) {
+          watchdog('commerce_printful', 'Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
+        } catch (PrintfulException $e) {
+          watchdog('commerce_printful', 'Printful Exception: ' . $e->getMessage());
+          watchdog('commerce_printful', $pf->getLastResponseRaw());
+        }
+
+      }
+    }
+  }
+
+  return $tax_rate;
+}
+
+/**
+ * Helper function to get Printful taxable states.
+ */
+function commerce_printful_taxable_states() {
+  $taxable_states = &drupal_static(__FUNCTION__);
+
+  if (!isset($taxable_states)) {
+    $taxable_states = array();
+
+    // Only consult Printful for the taxable states if this order contains Printful items.
+    global $user;
+    $order = commerce_cart_order_load($user->uid);
+    if ($order && commerce_printful_is_printful_order($order)) {
+
+      $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
+
+      try {
+        $printful_tax_countries = $pf->get('tax/countries');
+      } catch (PrintfulApiException $e) {
+        watchdog('commerce_printful', 'Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
+      } catch (PrintfulException $e) {
+        watchdog('commerce_printful', 'Printful Exception: ' . $e->getMessage());
+        watchdog('commerce_printful', $pf->getLastResponseRaw());
+      }
+
+      if (!empty($printful_tax_countries) && is_array($printful_tax_countries)) {
+        foreach ($printful_tax_countries as $tax_country) {
+          if (!empty($tax_country['code']) && $tax_country['code'] == 'US' && !empty($tax_country['states']) && is_array($tax_country['states'])) {
+            foreach ($tax_country['states'] as $tax_state) {
+              if (!empty($tax_state['code']) && !empty($tax_state['name'])) {
+                $taxable_states[$tax_state['code']] = array(
+                  'name' => $tax_state['name'],
+                  'shipping_taxable' => (!empty($tax_state['shipping_taxable'])),
+                );
+              }
+            }
+          }
+        }
+      }
+
+    }
+  }
+
+  return $taxable_states;
+}
+
+/**
+ * Helper function to get Printful tax rates.
+ */
+function commerce_printful_commerce_tax_calculation_callback($tax_rate, $line_item_wrapper) {
+  if (!is_null($line_item_wrapper->commerce_unit_price->value()) &&
+    !commerce_price_component_load($line_item_wrapper->commerce_unit_price->value(), $tax_rate['price_component'])) {
+
+    $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
+    if ($product->type != 'printful') {
+      return FALSE;
+    }
+
+    $use_this_tax_rate = $tax_rate['rate'] + ( rand(5, 10) / 100 );
+
+    $amount = $line_item_wrapper->commerce_unit_price->amount->value() * $use_this_tax_rate;
+    return array(
+      'amount' => $amount,
+      'currency_code' => $line_item_wrapper->commerce_unit_price->currency_code->value(),
+      'data' => array(
+        'tax_rate' => $tax_rate,
+      ),
+    );
+  }
+
+  return FALSE;
+}
+
+/**
+ * Implements hook_commerce_tax_type_calculate_rates().
+ */
+function commerce_printful_commerce_tax_type_calculate_rates($tax_type, $line_item) {
+  // Is this a sales tax calculation?
+  if ($tax_type['name'] != 'sales_tax') {
+    return;
+  }
+
+  $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+
+  // Is this a Printful item?
+  $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
+  if ($product->type != 'printful') {
+    return;
+  }
+
+  $taxable_states = commerce_printful_taxable_states();
+  $order = $line_item_wrapper->order->value();
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  $shipping_address = $order_wrapper->commerce_customer_shipping->commerce_customer_address->value();
+
+  if (empty($shipping_address['administrative_area']) || !in_array($shipping_address['administrative_area'], array_keys($taxable_states))) {
+    return;
+  }
+
+  $printful_tax_rate = commerce_printful_tax_rate($order);
+  if (!empty($printful_tax_rate)) {
+
+    $tax_state = $taxable_states[$shipping_address['administrative_area']];
+    $type = strtr(strtolower('tax|' . $tax_state['name'] . ' ' . t('Sales Tax')), ' ', '_');
+
+    $price = $line_item_wrapper->commerce_unit_price->value();
+    $amount = commerce_round(COMMERCE_ROUND_HALF_UP, ($price['amount'] * $printful_tax_rate['rate']));
+
+    $component_price = array(
+      'amount' => $amount,
+      'currency_code' => $price['currency_code'],
+      'data' => array(),
+    );
+
+    // Add the tax component to the line item.
+    $line_item_wrapper->commerce_unit_price->data = commerce_price_component_add($price, $type, $component_price, FALSE);
+
+  }
+}
+
+/**
+ * Implements hook_commerce_price_component_type_info().
+ */
+function commerce_printful_commerce_price_component_type_info() {
+  $components = array();
+  foreach (commerce_printful_taxable_states() as $code => $state) {
+    $title = $state['name'] . ' ' . t('Sales Tax');
+    $components[strtr(strtolower('tax|' . $title), ' ', '_')] = array(
+      'title' => $title,
+      'display_title' => $title,
+    );
+  }
+  return $components;
 }
