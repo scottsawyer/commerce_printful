@@ -40,10 +40,12 @@ function commerce_printful_is_printful_order($order) {
   if ($order) {
     $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
     foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
-      $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
-      if ($product->type == 'printful') {
-        $has_printful = TRUE;
-        break;
+      if ($line_item_wrapper->__isset('commerce_product')) {
+        $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
+        if ($product->type == 'printful') {
+          $has_printful = TRUE;
+          break;
+        }
       }
     }
   }
@@ -83,23 +85,25 @@ function commerce_printful_get_printful_shipping($order) {
 
       foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
         // Check for Printful product types.
-        if ($line_item_wrapper->commerce_product->type->value() == 'printful') {
+        if ($line_item_wrapper->__isset('commerce_product')) {
+          if ($line_item_wrapper->commerce_product->type->value() == 'printful') {
 
-          // Load the product object.
-          $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
+            // Load the product object.
+            $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
 
-          // Get the Printful product_id and variant_id from the SKU.
-          $identifiers = explode('-', $product->sku);
-          $printful_product_id = $identifiers[0];
-          $printful_variant_id = $identifiers[1];
+            // Get the Printful product_id and variant_id from the SKU.
+            $identifiers = explode('-', $product->sku);
+            $printful_product_id = $identifiers[0];
+            $printful_variant_id = $identifiers[1];
 
-          $printful_items[] = array(
-            'variant_id' => $printful_variant_id,
-            'quantity' => 1,
-            'files' => array(
-              array('url' => 'http://example.com/files/posters/poster_1.jpg'),
-            ),
-          );
+            $printful_items[] = array(
+              'variant_id' => $printful_variant_id,
+              'quantity' => 1,
+              'files' => array(
+                array('url' => 'http://example.com/files/posters/poster_1.jpg'),
+              ),
+            );
+          }
         }
       }
 
@@ -235,6 +239,10 @@ function commerce_printful_commerce_tax_type_calculate_rates($tax_type, $line_it
   $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
 
   // Is this a Printful item?
+  if (!$line_item_wrapper->__isset('commerce_product')) {
+    return;
+  }
+
   $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
   if ($product->type != 'printful') {
     return;
@@ -284,4 +292,106 @@ function commerce_printful_commerce_price_component_type_info() {
     );
   }
   return $components;
+}
+
+/**
+ * Implements hook_commerce_price_component_type_info().
+ */
+function commerce_printful_commerce_checkout_complete($order) {
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  $currency_code = $order_wrapper->commerce_order_total->currency_code->value();
+
+  // Prepare the Printful request.
+  $items = array();
+  $shipping_data = array();
+
+  $order_totals = $order_wrapper->commerce_order_total->value();
+
+  $order_total = commerce_currency_amount_to_decimal($order_totals['amount'], $currency_code);
+
+  $order_subtotal = commerce_price_component_total($order_totals, 'base_price');
+  $order_subtotal = commerce_currency_amount_to_decimal($order_subtotal['amount'], $currency_code);
+
+  $order_shipping = commerce_price_component_total($order_totals, 'shipping');
+  $order_shipping = commerce_currency_amount_to_decimal($order_shipping['amount'], $currency_code);
+
+  $order_tax = 0;
+  foreach ($order_totals['data']['components'] as $component) {
+    if (substr($component['name'], 0, 3) == 'tax') {
+      $order_tax = commerce_round(COMMERCE_ROUND_HALF_UP, $component['price']['amount']);
+    }
+  }
+  $order_tax = commerce_currency_amount_to_decimal($order_tax, $currency_code);
+
+  foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+    if (in_array($line_item_wrapper->type->value(), commerce_product_line_item_types())) {
+      $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
+      if ($product->type == 'printful') {
+
+        // Get the Printful product_id and variant_id from the SKU.
+        $identifiers = explode('-', $product->sku);
+        $printful_product_id = $identifiers[0];
+        $printful_variant_id = $identifiers[1];
+
+        $price = $line_item_wrapper->commerce_unit_price->value();
+
+        $items[] = array(
+          'variant_id' => $printful_variant_id,
+          'external_id' => $line_item_wrapper->line_item_id->value(),
+          'name' => $product->title,
+          'sku' => $product->sku,
+          'quantity' => (int) $line_item_wrapper->quantity->value(),
+          'retail_price' => commerce_currency_amount_to_decimal($price['amount'], $currency_code),
+          'files' => array(
+            array('url' => 'http://example.com/files/posters/poster_1.jpg'),
+          ),
+        );
+
+      }
+    }
+    elseif ($line_item_wrapper->type->value() == 'shipping') {
+      $shipping_data = $line_item_wrapper->value()->data;
+    }
+  }
+
+  // Get the shipping address.
+  $shipping_address = $order_wrapper->commerce_customer_shipping->commerce_customer_address->value();
+
+  // Get the Printful shipping method ID.
+  $shipping_method = commerce_printful_shipping_map($shipping_data['shipping_service']['name']);
+
+  // Create the Printful order request array.
+  $request = array(
+    'external_id' => $order->order_id,
+    'status' => 'draft',
+    'shipping' => (!empty($shipping_method) ? $shipping_method : 'STANDARD'),
+    'recipient' => array(
+      'name' => $shipping_address['name_line'],
+      'address1' => $shipping_address['thoroughfare'],
+      'city' => $shipping_address['locality'],
+      'state_code' => $shipping_address['administrative_area'],
+      'country_code' => $shipping_address['country'],
+      'zip' => $shipping_address['postal_code'],
+    ),
+    'items' => $items,
+    'retail_costs' => array(
+      'subtotal' => $order_subtotal,
+      'shipping' => $order_shipping,
+      'tax' => $order_tax,
+      'total' => $order_total,
+    ),
+  );
+
+  // Submit the request to Printful.
+  $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
+  try {
+    // Post the order to Printful.
+    $printful_order = $pf->post('orders', $request);
+    watchdog('commerce_printful', 'Order ' . $order->order_id . ' successfully sent to Printful.');
+  } catch (PrintfulApiException $e) {
+    watchdog('commerce_printful', 'Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
+  } catch (PrintfulException $e) {
+    watchdog('commerce_printful', 'Printful Exception: ' . $e->getMessage());
+    watchdog('commerce_printful', $pf->getLastResponseRaw());
+  }
 }

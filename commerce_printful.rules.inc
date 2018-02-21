@@ -58,7 +58,7 @@ function commerce_printful_service_rate_order($service, $order) {
       if ($ps['id'] == $printful_service_id) {
         $printful_amount = commerce_currency_decimal_to_amount($ps['rate'], $currency);
         $matches = TRUE;
-        last;
+        break;
       }
     }
     if (!$matches) {
