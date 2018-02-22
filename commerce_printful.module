@@ -6,6 +6,8 @@ use Printful\PrintfulApiClient;
 
 /**
  * Implements hook_menu().
+ *
+ * Adds the Commerce Printful configuration page.
  */
 function commerce_printful_menu() {
   $items = array();
@@ -23,6 +25,9 @@ function commerce_printful_menu() {
 
 /**
  * Implements hook_permission().
+ *
+ * Creates a permission for accessing the Commerce Printful
+ * configuration page.
  */
 function commerce_printful_permission() {
   $perms = array();
@@ -33,7 +38,7 @@ function commerce_printful_permission() {
 }
 
 /**
- * Check an order for Printful items.
+ * Function to check an order for Printful items.
  */
 function commerce_printful_is_printful_order($order) {
   $has_printful = FALSE;
@@ -53,11 +58,12 @@ function commerce_printful_is_printful_order($order) {
 }
 
 /**
- * Map commerce_shipping IDs to Printful IDs.
+ * Utility function for converting Commerce Shipping method IDs
+ * to their matching Printful shipping IDs.
  */
 function commerce_printful_shipping_map($id) {
   $map = array(
-    'usps_first_class' => '',
+    'usps_first_class' => 'USPS_FIRST',
     'usps_priority_mail' => 'USPS_PRIORITY',
     'usps_pmi' => '',
     'usps_express_mail' => '',
@@ -66,7 +72,7 @@ function commerce_printful_shipping_map($id) {
 }
 
 /**
- * Get Printful shipping rates for an order.
+ * Function for getting order shipping rates from the Printful API.
  */
 function commerce_printful_get_printful_shipping($order) {
   $printful_shipping = &drupal_static(__FUNCTION__);
@@ -140,7 +146,7 @@ function commerce_printful_get_printful_shipping($order) {
 }
 
 /**
- * Get Printful tax rates for an order.
+ * Function for getting tax rates from the Printful API.
  */
 function commerce_printful_tax_rate($order) {
   $tax_rate = &drupal_static(__FUNCTION__);
@@ -182,7 +188,7 @@ function commerce_printful_tax_rate($order) {
 }
 
 /**
- * Get Printful taxable states.
+ * Function for getting taxable states from the Printful API.
  */
 function commerce_printful_taxable_states() {
   $taxable_states = &drupal_static(__FUNCTION__);
@@ -229,6 +235,10 @@ function commerce_printful_taxable_states() {
 
 /**
  * Implements hook_commerce_tax_type_calculate_rates().
+ *
+ * Checks an order for a shipping address matching states where
+ * Printful operates fulfillment centers and adds the tax costs
+ * to orders accordingly.
  */
 function commerce_printful_commerce_tax_type_calculate_rates($tax_type, $line_item) {
   // Is this a sales tax calculation?
@@ -281,6 +291,9 @@ function commerce_printful_commerce_tax_type_calculate_rates($tax_type, $line_it
 
 /**
  * Implements hook_commerce_price_component_type_info().
+ *
+ * Creates tax pricing components for each of the states in which
+ * Printful operates fulfillment centers.
  */
 function commerce_printful_commerce_price_component_type_info() {
   $components = array();
@@ -295,7 +308,10 @@ function commerce_printful_commerce_price_component_type_info() {
 }
 
 /**
- * Implements hook_commerce_price_component_type_info().
+ * Implements hook_commerce_checkout_complete().
+ *
+ * Prepares the request and submits the final order to Printful
+ * for fulfillment.
  */
 function commerce_printful_commerce_checkout_complete($order) {
   $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
@@ -394,4 +410,76 @@ function commerce_printful_commerce_checkout_complete($order) {
     watchdog('commerce_printful', 'Printful Exception: ' . $e->getMessage());
     watchdog('commerce_printful', $pf->getLastResponseRaw());
   }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Add a custom submit handler to the first checkout page form
+ * for adding shipping costs to orders which only contain
+ * shippable products from Printful.
+ */
+function commerce_printful_form_commerce_checkout_form_alter(&$form, &$form_state, $form_id) {
+  dsm($form);
+  $form['buttons']['continue']['#submit'][] = 'commerce_printful_add_shipping_cost';
+}
+
+/**
+ * Submit handler which checks to see if an order contains only
+ * shippable products fulfilled by Printful and adds a custom
+ * shipping line item and matching pricing component if so.
+ */
+function commerce_printful_add_shipping_cost($form, &$form_state) {
+dsm($form);
+  global $user;
+  $order = commerce_cart_order_load($user->uid);
+
+  // Only add the custom shipping line item and pricing component if the
+  // order has no weight and contains at least one Printful item.
+  if (module_exists('commerce_physical') && commerce_printful_is_printful_order($order)) {
+    $weight = commerce_physical_order_weight($order, 'lb');
+    if (!is_array($weight) || $weight['weight'] == NULL) {
+      $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+      $currency = $order_wrapper->commerce_order_total->currency_code->value();
+      $printful_shipping = commerce_printful_get_printful_shipping($order);
+      dsm($printful_shipping);
+    }
+  }
+}
+
+/**
+ * Implements hook_commerce_checkout_page_info().
+ *
+ * For sites that don't use commerce_shipping, we need to define the shipping page.
+ *
+ */
+function commerce_printful_commerce_checkout_page_info() {
+  if (!module_exists('commerce_shipping')) {
+    $checkout_pages = array();
+
+    $checkout_pages['shipping'] = array(
+      'title' => t('Shipping'),
+      'weight' => 5,
+    );
+
+    return $checkout_pages;
+  }
+}
+
+/**
+ * Implements hook_commerce_checkout_pane_info().
+ */
+function commerce_printful_commerce_checkout_pane_info() {
+  $checkout_panes = array();
+
+  $checkout_panes['commerce_printful_shipping'] = array(
+    'title' => t('Shipping service'),
+    'base' => 'commerce_printful_shipping_pane',
+    'file' => 'includes/commerce_printful_shipping.checkout_pane.inc',
+    'page' => 'shipping',
+    'weight' => 2,
+    'review' => FALSE,
+  );
+
+  return $checkout_panes;
 }
