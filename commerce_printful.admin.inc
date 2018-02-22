@@ -36,5 +36,22 @@ function commerce_printful_admin_settings($form, &$form_state) {
     '#default_value' => variable_get('commerce_printful_api_key', ''),
   );
 
+  $form['settings'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Shipping Settings'),
+    '#collapsible' => TRUE,
+  );
+  $services = array();
+  foreach (commerce_printful_shipping_service_list() as $machine_name => $service) {
+    $services[$machine_name] = $service['title'];
+  }
+  $form['settings']['commerce_printful_shipping_services'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Shipping Services'),
+    '#description' => t('Select the Printful shipping services that are available to customers.'),
+    '#default_value' => variable_get('commerce_printful_shipping_services', array()),
+    '#options' => $services,
+  );
+
   return system_settings_form($form);
 }

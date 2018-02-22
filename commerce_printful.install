@@ -7,6 +7,7 @@ function commerce_printful_uninstall() {
   // Remove variables.
   $vars = array(
     'commerce_printful_api_key',
+    'commerce_printful_shipping_services',
   );
   foreach ($vars as $var) {
     variable_del($var);

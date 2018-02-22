@@ -11,14 +11,16 @@ use Printful\PrintfulApiClient;
  */
 function commerce_printful_menu() {
   $items = array();
-  $items['admin/config/services/printful'] = array(
-    'title' => 'Printful API',
+  $items['admin/commerce/config/printful'] = array(
+    'title' => 'Printful',
     'description' => 'Configure the Printful API integration.',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('commerce_printful_admin_settings'),
     'access arguments' => array('administer commerce printful'),
     'file' => 'commerce_printful.admin.inc',
-    'type' => MENU_NORMAL_ITEM,
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_INLINE,
+    'weight' => 0,
   );
   return $items;
 }
@@ -58,91 +60,78 @@ function commerce_printful_is_printful_order($order) {
 }
 
 /**
- * Utility function for converting Commerce Shipping method IDs
- * to their matching Printful shipping IDs.
- */
-function commerce_printful_shipping_map($id) {
-  $map = array(
-    'usps_first_class' => 'USPS_FIRST',
-    'usps_priority_mail' => 'USPS_PRIORITY',
-    'usps_pmi' => '',
-    'usps_express_mail' => '',
-  );
-  return (!empty($map[$id])) ? $map[$id] : FALSE;
-}
-
-/**
  * Function for getting order shipping rates from the Printful API.
  */
-function commerce_printful_get_printful_shipping($order) {
-  $printful_shipping = &drupal_static(__FUNCTION__);
+function commerce_printful_get_printful_shipping($order, $shipping_address) {
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  $currency_code = $order_wrapper->commerce_order_total->currency_code->value();
 
-  if (!isset($printful_shipping)) {
-    $printful_shipping = array();
+  // Prepare the items array for the shipping rate request.
+  $items = array();
+  foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+    // Check for Printful product types.
+    if ($line_item_wrapper->__isset('commerce_product')) {
+      if ($line_item_wrapper->commerce_product->type->value() == 'printful') {
 
-    if ($order) {
-      $printful_items = array();
-      $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+        // Load the product object.
+        $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
 
-      $shipping_address = $order_wrapper->commerce_customer_shipping->commerce_customer_address->value();
-      if (empty($shipping_address['administrative_area']) || empty($shipping_address['country']) || empty($shipping_address['postal_code'])) {
-        return $printful_shipping;
-      }
+        // Get the Printful product_id and variant_id from the SKU.
+        $identifiers = explode('-', $product->sku);
+        $variant_id = $identifiers[1];
 
-      foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
-        // Check for Printful product types.
-        if ($line_item_wrapper->__isset('commerce_product')) {
-          if ($line_item_wrapper->commerce_product->type->value() == 'printful') {
-
-            // Load the product object.
-            $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
-
-            // Get the Printful product_id and variant_id from the SKU.
-            $identifiers = explode('-', $product->sku);
-            $printful_product_id = $identifiers[0];
-            $printful_variant_id = $identifiers[1];
-
-            $printful_items[] = array(
-              'variant_id' => $printful_variant_id,
-              'quantity' => 1,
-              'files' => array(
-                array('url' => 'http://example.com/files/posters/poster_1.jpg'),
-              ),
-            );
-          }
-        }
-      }
-
-      $currency_code = $order_wrapper->commerce_order_total->currency_code->value();
-
-      // Prepare the Printful order request.
-      $request = array(
-        'recipient' => array(
-          'name' => $shipping_address['name_line'],
-          'address1' => $shipping_address['thoroughfare'],
-          'city' => $shipping_address['locality'],
-          'state_code' => $shipping_address['administrative_area'],
-          'country_code' => $shipping_address['country'],
-          'zip' => $shipping_address['postal_code'],
-        ),
-        'items' => $printful_items,
-        'currency' => $currency_code,
-      );
-
-      $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
-
-      try {
-        $printful_shipping = $pf->post('shipping/rates', $request);
-      } catch (PrintfulApiException $e) {
-        watchdog('commerce_printful', 'Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
-      } catch (PrintfulException $e) {
-        watchdog('commerce_printful', 'Printful Exception: ' . $e->getMessage());
-        watchdog('commerce_printful', $pf->getLastResponseRaw());
+        $items[] = array(
+          'variant_id' => $variant_id,
+          'quantity' => 1,
+          'files' => array(
+            array('url' => 'http://example.com/files/posters/poster_1.jpg'),
+          ),
+        );
       }
     }
   }
 
-  return $printful_shipping;
+  // Prepare the shipping rate request.
+  $request = array(
+    'recipient' => array(
+      'name' => $shipping_address['name_line'],
+      'address1' => $shipping_address['thoroughfare'],
+      'city' => $shipping_address['locality'],
+      'state_code' => $shipping_address['administrative_area'],
+      'country_code' => $shipping_address['country'],
+      'zip' => $shipping_address['postal_code'],
+    ),
+    'items' => $items,
+    'currency' => $currency_code,
+  );
+
+  $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
+
+  $response = FALSE;
+  try {
+    $response = $pf->post('shipping/rates', $request);
+  } catch (PrintfulApiException $e) {
+    watchdog('commerce_printful', 'Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
+  } catch (PrintfulException $e) {
+    watchdog('commerce_printful', 'Printful Exception: ' . $e->getMessage());
+    watchdog('commerce_printful', $pf->getLastResponseRaw());
+  }
+
+  $rates = array();
+  if ($response) {
+    foreach ($response as $r) {
+      $service = commerce_printful_shipping_service_by_id($r['id']);
+      if (!empty($service['machine_name'])) {
+        $rates[$service['machine_name']] = array(
+          'amount' => commerce_currency_decimal_to_amount((string) $r['rate'], $currency_code),
+          'currency_code' => $currency_code,
+          'data' => array(),
+        );
+      }
+    }
+  }
+
+  return $rates;
 }
 
 /**
@@ -346,13 +335,12 @@ function commerce_printful_commerce_checkout_complete($order) {
 
         // Get the Printful product_id and variant_id from the SKU.
         $identifiers = explode('-', $product->sku);
-        $printful_product_id = $identifiers[0];
-        $printful_variant_id = $identifiers[1];
+        $variant_id = $identifiers[1];
 
         $price = $line_item_wrapper->commerce_unit_price->value();
 
         $items[] = array(
-          'variant_id' => $printful_variant_id,
+          'variant_id' => $variant_id,
           'external_id' => $line_item_wrapper->line_item_id->value(),
           'name' => $product->title,
           'sku' => $product->sku,
@@ -371,10 +359,12 @@ function commerce_printful_commerce_checkout_complete($order) {
   }
 
   // Get the shipping address.
-  $shipping_address = $order_wrapper->commerce_customer_shipping->commerce_customer_address->value();
+  $shipping_address = commerce_printful_get_order_shipping_address($order);
 
+  // Here we need to check the order for weight and some logic to determine which
+  // method should be designated for the Printful portion of the order.
   // Get the Printful shipping method ID.
-  $shipping_method = commerce_printful_shipping_map($shipping_data['shipping_service']['name']);
+  // $shipping_method = commerce_printful_shipping_map($shipping_data['shipping_service']['name']);
 
   // Create the Printful order request array.
   $request = array(
@@ -402,7 +392,7 @@ function commerce_printful_commerce_checkout_complete($order) {
   $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
   try {
     // Post the order to Printful.
-    $printful_order = $pf->post('orders', $request);
+    $response = $pf->post('orders', $request);
     watchdog('commerce_printful', 'Order ' . $order->order_id . ' successfully sent to Printful.');
   } catch (PrintfulApiException $e) {
     watchdog('commerce_printful', 'Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
@@ -410,76 +400,252 @@ function commerce_printful_commerce_checkout_complete($order) {
     watchdog('commerce_printful', 'Printful Exception: ' . $e->getMessage());
     watchdog('commerce_printful', $pf->getLastResponseRaw());
   }
+
+  // Here we might consider updating the order status and/or sending an
+  // email if the submission to Printful fails.
 }
 
 /**
- * Implements hook_form_FORM_ID_alter().
+ * Implements hook_commerce_shipping_method_info().
+ */
+function commerce_printful_commerce_shipping_method_info() {
+  return array(
+    'printful' => array(
+      'title' => t('Printful'),
+      'description' => t('Printful shipping services.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_commerce_shipping_service_info().
+ */
+function commerce_printful_commerce_shipping_service_info() {
+
+  $available = commerce_printful_shipping_service_list();
+  $enabled = variable_get('commerce_printful_shipping_services', array());
+  $registered_services = array();
+
+  // Add enabled Printful shipping services to the commerce_shipping service info.
+  foreach ($enabled as $machine_name => $service) {
+    if ($service) {
+      $registered_services[$machine_name] = array(
+        'title' => $available[$machine_name]['title'],
+        'description' => $available[$machine_name]['title'],
+        'display_title' => $available[$machine_name]['title'],
+        'shipping_method' => 'printful',
+        'price_component' => 'shipping',
+        'callbacks' => array(
+          'rate' => 'commerce_printful_shipping_rate',
+        ),
+      );
+    }
+  }
+
+  return $registered_services;
+
+}
+
+/**
+ * Returns a base price array for a shipping service calculated for the order.
  *
- * Add a custom submit handler to the first checkout page form
- * for adding shipping costs to orders which only contain
- * shippable products from Printful.
+ * @param array $service
+ *   An array describing the shipping service.
+ * @param object $order
+ *   The order object.
+ *
+ * @return array
+ *   The service rates returned from Printful
  */
-function commerce_printful_form_commerce_checkout_form_alter(&$form, &$form_state, $form_id) {
-  dsm($form);
-  $form['buttons']['continue']['#submit'][] = 'commerce_printful_add_shipping_cost';
+function commerce_printful_shipping_rate($service, $order) {
+  // Attempt to recover cached shipping rates.
+  $rates = commerce_shipping_rates_cache_get('printful', $order, variable_get('commerce_printful_shipping_rates_timeout', 0));
+
+  // If no cached rates were found or they have expired.
+  if (!is_array($rates) && commerce_printful_validate_order($order)) {
+
+    $shipping_address = commerce_printful_get_order_shipping_address($order);
+    $rates = commerce_printful_get_printful_shipping($order, $shipping_address);
+    commerce_shipping_rates_cache_set('printful', $order, (array) $rates);
+
+  }
+
+  // Return the rate for the requested service or FALSE if not found.
+  return isset($rates[$service['name']]) ? $rates[$service['name']] : FALSE;
 }
 
 /**
- * Submit handler which checks to see if an order contains only
- * shippable products fulfilled by Printful and adds a custom
- * shipping line item and matching pricing component if so.
+ * Validate that the order can return a successful rate request.
+ *
+ * @param object $order
+ *   The order object.
+ *
+ * @return bool
+ *   Returns TRUE if the order passes validation.
  */
-function commerce_printful_add_shipping_cost($form, &$form_state) {
-dsm($form);
-  global $user;
-  $order = commerce_cart_order_load($user->uid);
+function commerce_printful_validate_order($order) {
+  $shipping_address = commerce_printful_get_order_shipping_address($order);
 
-  // Only add the custom shipping line item and pricing component if the
-  // order has no weight and contains at least one Printful item.
-  if (module_exists('commerce_physical') && commerce_printful_is_printful_order($order)) {
+  // We have to have a shipping address to get rates.
+  if (empty($shipping_address)) {
+    return FALSE;
+  }
+
+  // US shipping addresses require a zipcode.
+  if ($shipping_address['country'] == 'US' && empty($shipping_address['postal_code'])) {
+    return FALSE;
+  }
+
+  // Make sure the order has no other shippable items.
+  if (module_exists('commerce_physical')) {
     $weight = commerce_physical_order_weight($order, 'lb');
-    if (!is_array($weight) || $weight['weight'] == NULL) {
-      $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
-      $currency = $order_wrapper->commerce_order_total->currency_code->value();
-      $printful_shipping = commerce_printful_get_printful_shipping($order);
-      dsm($printful_shipping);
+    if (!empty($weight['weight'])) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+/**
+ * Get the shipping address of the order.
+ */
+function commerce_printful_get_order_shipping_address($order) {
+
+  $shipping_address = array();
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
+  // Determine the shipping profile reference field name for the order.
+  $field_name = NULL;
+
+  if (!empty($order->commerce_customer_shipping)) {
+    $field_name = 'commerce_customer_shipping';
+  }
+  else {
+    // Look for customer profile references fields available for the order.
+    foreach (field_info_instances('commerce_order', $order->type) as $instance_name => $instance) {
+      // Load the field info for the current instance.
+      $field = field_info_field($instance['field_name']);
+
+      // If it's of the proper type...
+      if ($field['type'] == 'commerce_customer_profile_reference') {
+        // Save its name and exit the loop if it isn't the billing profile.
+        $field_name = $instance_name;
+
+        if ($field_name != 'commerce_customer_billing') {
+          break;
+        }
+      }
+    }
+  }
+
+  // Prepare the shipping address for use in the request.
+  if (!empty($order_wrapper->{$field_name}->commerce_customer_address)) {
+    $shipping_address = $order_wrapper->{$field_name}->commerce_customer_address->value();
+  }
+
+  return $shipping_address;
+}
+
+/**
+ * Look up a Printful shipping service by its id.
+ */
+function commerce_printful_shipping_service_by_id($id) {
+  foreach (commerce_printful_shipping_service_list() as $machine_name => $service) {
+    if ($service['request_name'] == $id) {
+      return array_merge(array('machine_name' => $machine_name), $service);
     }
   }
 }
 
 /**
- * Implements hook_commerce_checkout_page_info().
+ * Returns an array of Printful shipping services and related data.
  *
- * For sites that don't use commerce_shipping, we need to define the shipping page.
- *
+ * @return array
+ *   Printful shipping service data.
  */
-function commerce_printful_commerce_checkout_page_info() {
-  if (!module_exists('commerce_shipping')) {
-    $checkout_pages = array();
-
-    $checkout_pages['shipping'] = array(
-      'title' => t('Shipping'),
-      'weight' => 5,
-    );
-
-    return $checkout_pages;
-  }
-}
-
-/**
- * Implements hook_commerce_checkout_pane_info().
- */
-function commerce_printful_commerce_checkout_pane_info() {
-  $checkout_panes = array();
-
-  $checkout_panes['commerce_printful_shipping'] = array(
-    'title' => t('Shipping service'),
-    'base' => 'commerce_printful_shipping_pane',
-    'file' => 'includes/commerce_printful_shipping.checkout_pane.inc',
-    'page' => 'shipping',
-    'weight' => 2,
-    'review' => FALSE,
+function commerce_printful_shipping_service_list() {
+  $services = array(
+    'printful_standard' => array(
+      'request_name' => 'STANDARD',
+      'title' => t('Flat Rate'),
+      'id' => 0,
+    ),
+    'printful_fedex_ground' => array(
+      'request_name' => 'FEDEX_GROUND',
+      'title' => t('FedEx Ground'),
+      'id' => 1,
+    ),
+    'printful_fedex_ground_home' => array(
+      'request_name' => 'FEDEX_GROUND_HOME_DELIVERY',
+      'title' => t('FedEx Ground Home Delivery'),
+      'id' => 2,
+    ),
+    'printful_fedex_smart_post' => array(
+      'request_name' => 'FEDEX_SMART_POST',
+      'title' => t('FedEx SmartPost'),
+      'id' => 3,
+    ),
+    'printful_usps_parcelselect' => array(
+      'request_name' => 'USPS_PARCELSELECT',
+      'title' => t('USPS ParcelSelect'),
+      'id' => 4,
+    ),
+    'printful_usps_first' => array(
+      'request_name' => 'USPS_FIRST',
+      'title' => t('USPS First Class Mail'),
+      'id' => 5,
+    ),
+    'printful_usps_priority' => array(
+      'request_name' => 'USPS_PRIORITY',
+      'title' => t('USPS Priority Mail'),
+      'id' => 6,
+    ),
+    'printful_usps_first_intl' => array(
+      'request_name' => 'USPS_FIRSTCLASSPACKAGEINTERNATIONALSERVICE',
+      'title' => t("USPS First Class Package Int'l"),
+      'id' => 7,
+    ),
+    'printful_intl_economy_no_track' => array(
+      'request_name' => 'APC_PARCEL_CONNECT',
+      'title' => t("Int'l Economy without tracking"),
+      'id' => 8,
+    ),
+    'printful_intl_economy_with_track' => array(
+      'request_name' => 'APC_PARCEL_CONFIRM',
+      'title' => t("Int'l Economy with tracking"),
+      'id' => 9,
+    ),
+    'printful_intl_economy_duty_paid' => array(
+      'request_name' => 'APC_PARCEL_DDP_CONFIRM',
+      'title' => t("Int'l Economy Duties paid with tracking"),
+      'id' => 10,
+    ),
+    'printful_fedex_2day' => array(
+      'request_name' => 'FEDEX_2_DAY',
+      'title' => t('FedEx 2 Day'),
+      'id' => 11,
+    ),
+    'printful_fedex_std_overnight' => array(
+      'request_name' => 'FEDEX_STANDARD_OVERNIGHT',
+      'title' => t('FedEx Standard Overnight'),
+      'id' => 12,
+    ),
+    'printful_fedex_intl_economy' => array(
+      'request_name' => 'FEDEX_INTERNATIONAL_ECONOMY',
+      'title' => t('FedEx International Economy'),
+      'id' => 13,
+    ),
+    'printful_fedex_intl_priority' => array(
+      'request_name' => 'FEDEX_INTERNATIONAL_PRIORITY',
+      'title' => t('FedEx International Priority'),
+      'id' => 14,
+    ),
+    'printful_priority_intl' => array(
+      'request_name' => 'USPS_PRIORITYMAILINTERNATIONAL',
+      'title' => t("UPSP Priority Mail Int'l"),
+      'id' => 15,
+    ),
   );
-
-  return $checkout_panes;
+  return $services;
 }
