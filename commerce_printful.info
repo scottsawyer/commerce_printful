@@ -10,4 +10,4 @@ dependencies[] = commerce_tax
 dependencies[] = composer_manager
 
 package = Commerce (contrib)
-configure = admin/config/services/printful
+configure = admin/commerce/config/printful

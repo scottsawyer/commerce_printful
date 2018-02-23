@@ -309,9 +309,6 @@ function commerce_printful_commerce_tax_type_calculate_rates($tax_type, $line_it
 
 /**
  * Implements hook_commerce_price_component_type_info().
- *
- * Creates tax pricing components for each of the states in which
- * Printful operates fulfillment centers.
  */
 function commerce_printful_commerce_price_component_type_info() {
   $title = t('Sales tax');
