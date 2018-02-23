@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * @file
+ * Provides the Commerce Printful drush commands.
+ */
+
 use Printful\Exceptions\PrintfulApiException;
 use Printful\Exceptions\PrintfulException;
 use Printful\PrintfulApiClient;
@@ -29,9 +34,11 @@ function drush_commerce_printful_printful_test() {
   try {
     $store = $pf->get('store');
     drush_print_r($store);
-  } catch (PrintfulApiException $e) { //API response status code was not successful
+  }
+  catch (PrintfulApiException $e) {
     dt('Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
-  } catch (PrintfulException $e) { //API call failed
+  }
+  catch (PrintfulException $e) {
     dt('Printful Exception: ' . $e->getMessage());
     drush_print_r($pf->getLastResponseRaw());
   }
@@ -61,7 +68,6 @@ function drush_commerce_printful_printful_sync_products() {
 
       // Loop over each variant and create new SKU if needed.
       foreach ($variants['sync_variants'] as $variant) {
-        // drush_print_r($variant);
 
         // We dynamically create a SKU from the Printful IDs.
         $sku = $variant['product']['product_id'] . '-' . $variant['product']['variant_id'];
@@ -96,8 +102,6 @@ function drush_commerce_printful_printful_sync_products() {
         $product_ids[] = $wrapper->product_id->value();
       }
 
-      // drush_print_r($product_ids);
-
       // Create a product display node if needed.
       $has_display = (new EntityFieldQuery())
         ->entityCondition('entity_type', 'node')
@@ -120,9 +124,11 @@ function drush_commerce_printful_printful_sync_products() {
       }
     }
 
-  } catch (PrintfulApiException $e) { //API response status code was not successful
+  }
+  catch (PrintfulApiException $e) {
     dt('Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
-  } catch (PrintfulException $e) { //API call failed
+  }
+  catch (PrintfulException $e) {
     dt('Printful Exception: ' . $e->getMessage());
     drush_print_r($pf->getLastResponseRaw());
   }

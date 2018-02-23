@@ -1,8 +1,9 @@
 <?php
 
-use Printful\Exceptions\PrintfulApiException;
-use Printful\Exceptions\PrintfulException;
-use Printful\PrintfulApiClient;
+/**
+ * @file
+ * Provides the Commerce Printful rules actions.
+ */
 
 /**
  * Implements hook_rules_action_info().
@@ -40,56 +41,69 @@ function commerce_printful_rules_action_info() {
  *   The order for which the shipping service should be rated.
  */
 function commerce_printful_service_rate_order($service, $order) {
-  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
-  $currency = $order_wrapper->commerce_order_total->currency_code->value();
-
   // Load the full shipping service info array.
   $shipping_service = commerce_shipping_service_load($service);
 
-  $skip_service = FALSE;
   $printful_amount = 0;
 
   if (commerce_printful_is_printful_order($order)) {
-    $printful_shipping = commerce_printful_get_printful_shipping($order);
-    $printful_service_id = commerce_printful_shipping_map($service);
 
+    // If the order has no weight hide the service.
+    if (module_exists('commerce_physical')) {
+      $weight = commerce_physical_order_weight($order, 'lb');
+      if (empty($weight['weight'])) {
+        return;
+      }
+    }
+
+    $shipping_address = commerce_printful_get_order_shipping_address($order);
+
+    // Get the full list of Printful shipping services.
+    $printful_shipping_services = commerce_printful_shipping_service_list();
+
+    // Get the order's Printful shipping rates from the API.
+    $printful_shipping_rates = commerce_printful_get_printful_shipping($order, $shipping_address);
+
+    // Determine if the current Commerce Shipping method matches any of the
+    // Printful methods.
     $matches = FALSE;
-    foreach ($printful_shipping as $ps) {
-      if ($ps['id'] == $printful_service_id) {
-        $printful_amount = commerce_currency_decimal_to_amount($ps['rate'], $currency);
+    foreach ($printful_shipping_rates as $machine_name => $printful_service_rate) {
+      $printful_service = $printful_shipping_services[$machine_name];
+      if (isset($printful_service['commerce_shipping_id']) && $printful_service['commerce_shipping_id'] == $service) {
+        $printful_amount = $printful_service_rate['amount'];
         $matches = TRUE;
         break;
       }
     }
+
+    // Hide the service if it is not included in the Printful resposne.
     if (!$matches) {
-      $skip_service = TRUE;
+      return;
     }
   }
 
-  if (!$skip_service) {
-    // If the service specifies a rate callback...
-    if ($callback = commerce_shipping_service_callback($shipping_service, 'rate')) {
-      // Get the base rate price for the shipping service.
-      $price = $callback($shipping_service, $order);
+  // If the service specifies a rate callback...
+  if ($callback = commerce_shipping_service_callback($shipping_service, 'rate')) {
+    // Get the base rate price for the shipping service.
+    $price = $callback($shipping_service, $order);
 
-      if (!empty($printful_amount)) {
-        $price['amount'] = $price['amount'] + $printful_amount;
-      }
+    if (!empty($printful_amount)) {
+      $price['amount'] = $price['amount'] + $printful_amount;
+    }
 
-      // If we got a base price...
-      if ($price) {
-        // Create a calculated shipping line item out of it.
-        $line_item = commerce_shipping_service_rate_calculate($service, $price, $order->order_id);
-        $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+    // If we got a base price...
+    if ($price) {
+      // Create a calculated shipping line item out of it.
+      $line_item = commerce_shipping_service_rate_calculate($service, $price, $order->order_id);
+      $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
 
-        // Add the rate to the order as long as it doesn't have
-        // a NULL price amount.
-        if (!is_null($line_item_wrapper->commerce_unit_price->amount->value())) {
-          // Include a weight property on the line item object from the shipping
-          // service for sorting rates.
-          $line_item->weight = empty($shipping_service['weight']) ? 0 : $shipping_service['weight'];
-          $order->shipping_rates[$service] = $line_item;
-        }
+      // Add the rate to the order as long as it doesn't have
+      // a NULL price amount.
+      if (!is_null($line_item_wrapper->commerce_unit_price->amount->value())) {
+        // Include a weight property on the line item object from the shipping
+        // service for sorting rates.
+        $line_item->weight = empty($shipping_service['weight']) ? 0 : $shipping_service['weight'];
+        $order->shipping_rates[$service] = $line_item;
       }
     }
   }

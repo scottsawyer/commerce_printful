@@ -1,10 +1,14 @@
 <?php
 
 /**
+ * @file
+ * Provides the Commerce Printful configuration form.
+ */
+
+/**
  * Admin settings form.
  */
 function commerce_printful_admin_settings($form, &$form_state) {
-  // Connection
   $form['connection'] = array(
     '#type' => 'fieldset',
     '#title' => t('Connection'),
