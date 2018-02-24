@@ -92,7 +92,7 @@ function commerce_printful_get_printful_shipping($order, $shipping_address) {
 
           $items[] = array(
             'variant_id' => $variant_id,
-            'quantity' => 1,
+            'quantity' => (int) $line_item_wrapper->quantity->value(),
             'files' => array(
               array('url' => 'http://example.com/files/posters/poster_1.jpg'),
             ),
