@@ -36,7 +36,13 @@ function commerce_printful_menu() {
   $items['commerce-printful/print-file-settings/%/%/%/%ctools_js'] = array(
     'title' => 'Settings',
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('commerce_printful_print_file_settings_modal', 2, 3, 4, 5),
+    'page arguments' => array(
+      'commerce_printful_print_file_settings_modal',
+      2,
+      3,
+      4,
+      5,
+    ),
     'theme callback' => 'ajax_base_page_theme',
     'access arguments' => array('administer commerce printful'),
     'type' => MENU_CALLBACK,
@@ -802,7 +808,7 @@ function commerce_printful_generate_mockups(&$form, $form_state) {
   // Find the printfile_id for this variant's front.
   $variant_printfile_id = NULL;
   if (!empty($printfiles['variant_printfiles'])) {
-    foreach($printfiles['variant_printfiles'] as $vpf) {
+    foreach ($printfiles['variant_printfiles'] as $vpf) {
       if (!empty($vpf['variant_id']) && $vpf['variant_id'] == $printful_variant_id) {
         if (!empty($vpf['placements']['front'])) {
           $variant_printfile_id = $vpf['placements']['front'];
@@ -854,7 +860,7 @@ function commerce_printful_generate_mockups(&$form, $form_state) {
   $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
   $generator = new PrintfulMockupGenerator($pf);
 
-  $parameters = new MockupGenerationParameters;
+  $parameters = new MockupGenerationParameters();
   $parameters->format = $parameters::FORMAT_PNG;
   $parameters->productId = $printful_product_id;
   $parameters->variantIds = array($printful_variant_id);
@@ -871,7 +877,7 @@ function commerce_printful_generate_mockups(&$form, $form_state) {
   $left_offset = isset($settings['left_offset']) ? $settings['left_offset'] : 0;
   $top_offset = isset($settings['top_offset']) ? $settings['top_offset'] : 0;
 
-  $position = new MockupPositionItem;
+  $position = new MockupPositionItem();
   $position->areaWidth = $printfile['width'];
   $position->areaHeight = $printfile['height'];
   $position->width = $scaled_width;
@@ -899,7 +905,7 @@ function commerce_printful_generate_mockups(&$form, $form_state) {
   if (!empty($result)) {
     if (!empty($result->mockups[0])) {
       $mockup_images[] = $result->mockups[0]->mockupUrl;
-    } 
+    }
     if (!empty($result->mockups[0]->extraMockups) && is_array($result->mockups[0]->extraMockups)) {
       foreach ($result->mockups[0]->extraMockups as $extra_mockup) {
         $mockup_images[] = $extra_mockup->url;
@@ -912,7 +918,7 @@ function commerce_printful_generate_mockups(&$form, $form_state) {
 
   // TODO
   // Switch to system_retrieve_file()
-
+  //
   $mockup_files = array();
   foreach ($mockup_images as $delta => $mockup_image) {
     $image = file_get_contents($mockup_image);
@@ -954,7 +960,7 @@ function commerce_printful_printfiles($printful_product_id) {
 /**
  * CTools modal callback for editing a file.
  */
-function commerce_printful_print_file_settings_modal($form, &$form_state, $product_id = 0, $fid = 0, $delta = 0, $js) {
+function commerce_printful_print_file_settings_modal($form, &$form_state, $product_id, $fid, $delta, $js) {
   ctools_include('modal');
   ctools_include('ajax');
 
@@ -989,6 +995,9 @@ function commerce_printful_print_file_settings_modal($form, &$form_state, $produ
   return $output;
 }
 
+/**
+ * Provides the print file settings form.
+ */
 function commerce_printful_print_file_settings_form($form, $form_state) {
 
   if (!is_array($form_state['build_info']['args']) || count($form_state['build_info']['args']) != 3) {
@@ -1032,14 +1041,14 @@ function commerce_printful_print_file_settings_form($form, $form_state) {
   );
 
   $form['center_vertically'] = array(
-    '#type' =>'checkbox',
+    '#type' => 'checkbox',
     '#title' => t('Center vertically'),
     '#description' => t('Centers the print file relative to the full print area.'),
     '#default_value' => isset($settings['center_vertically']) ? $settings['center_vertically'] : NULL,
   );
 
   $form['center_horizontally'] = array(
-    '#type' =>'checkbox',
+    '#type' => 'checkbox',
     '#title' => t('Center horizontally'),
     '#description' => t('Centers the print file relative to the full print area.'),
     '#default_value' => isset($settings['center_horizontally']) ? $settings['center_horizontally'] : NULL,
@@ -1071,6 +1080,9 @@ function commerce_printful_print_file_settings_form($form, $form_state) {
   return $form;
 }
 
+/**
+ * Settings for submit handler.
+ */
 function commerce_printful_print_file_settings_form_submit($form, $form_state) {
 
   if (!is_array($form_state['build_info']['args']) || count($form_state['build_info']['args']) != 3) {
@@ -1096,10 +1108,10 @@ function commerce_printful_print_file_settings_form_submit($form, $form_state) {
   }
 
   db_delete('commerce_printful_print_file_settings')
-  ->condition('product_id', $product_id)
-  ->condition('fid', $fid)
-  ->condition('delta', $delta)
-  ->execute();
+    ->condition('product_id', $product_id)
+    ->condition('fid', $fid)
+    ->condition('delta', $delta)
+    ->execute();
 
   db_insert('commerce_printful_print_file_settings')
     ->fields(array(
