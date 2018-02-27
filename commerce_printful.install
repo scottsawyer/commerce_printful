@@ -117,6 +117,16 @@ function commerce_printful_install() {
 
   // Create the product reference field.
   $field = array(
+    'field_printful_product_id' => array(
+      'field_name' => 'field_printful_product_id',
+      'type' => 'text',
+      'cardinality' => 1,
+    ),
+    'field_printful_variant_id' => array(
+      'field_name' => 'field_printful_variant_id',
+      'type' => 'text',
+      'cardinality' => 1,
+    ),
     'field_printful_products' => array(
       'field_name' => 'field_printful_products',
       'type' => 'commerce_product_reference',
@@ -139,6 +149,20 @@ function commerce_printful_install() {
 
   // Create the field instance.
   $instance = array(
+    'field_printful_product_id' => array(
+      'field_name' => 'field_printful_product_id',
+      'entity_type' => 'commerce_product',
+      'bundle' => 'printful',
+      'label' => $t('Product ID'),
+      'widget' => array('type' => 'text_textfield', 'settings' => array('size' => '20')),
+    ),
+    'field_printful_variant_id' => array(
+      'field_name' => 'field_printful_variant_id',
+      'entity_type' => 'commerce_product',
+      'bundle' => 'printful',
+      'label' => $t('Variant ID'),
+      'widget' => array('type' => 'text_textfield', 'settings' => array('size' => '20')),
+    ),
     'field_printful_products' => array(
       'field_name' => 'field_printful_products',
       'entity_type' => 'node',
@@ -150,14 +174,14 @@ function commerce_printful_install() {
       'field_name' => 'field_printful_print_files',
       'entity_type' => 'commerce_product',
       'bundle' => 'printful',
-      'label' => $t('Printful print files'),
+      'label' => $t('Print files'),
       'widget' => array('type' => 'media_generic'),
     ),
     'field_printful_mockups' => array(
       'field_name' => 'field_printful_mockups',
       'entity_type' => 'commerce_product',
       'bundle' => 'printful',
-      'label' => $t('Printful mockup images'),
+      'label' => $t('Mockup images'),
       'widget' => array('type' => 'media_generic'),
     ),
   );

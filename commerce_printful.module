@@ -106,13 +106,10 @@ function commerce_printful_get_printful_shipping($order, $shipping_address) {
 
           // Load the product object.
           $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
-
-          // Get the Printful variant_id from the SKU.
-          $identifiers = explode('-', $product->sku);
-          $variant_id = $identifiers[1];
+          $product_wrapper = entity_metadata_wrapper('commerce_product', $product);
 
           $items[] = array(
-            'variant_id' => $variant_id,
+            'variant_id' => $product_wrapper->field_printful_variant_id->value(),
             'quantity' => (int) $line_item_wrapper->quantity->value(),
             'files' => array(
               array('url' => 'http://example.com/files/posters/poster_1.jpg'),
@@ -377,15 +374,12 @@ function commerce_printful_commerce_checkout_complete($order) {
     if (in_array($line_item_wrapper->type->value(), commerce_product_line_item_types())) {
       $product = commerce_product_load($line_item_wrapper->commerce_product->raw());
       if ($product->type == 'printful') {
-
-        // Get the Printful product_id and variant_id from the SKU.
-        $identifiers = explode('-', $product->sku);
-        $variant_id = $identifiers[1];
+        $product_wrapper = entity_metadata_wrapper('commerce_product', $product);
 
         $price = $line_item_wrapper->commerce_unit_price->value();
 
         $items[] = array(
-          'variant_id' => $variant_id,
+          'variant_id' => $product_wrapper->field_printful_variant_id->value(),
           'external_id' => $line_item_wrapper->line_item_id->value(),
           'name' => $product->title,
           'sku' => $product->sku,
@@ -412,7 +406,7 @@ function commerce_printful_commerce_checkout_complete($order) {
   // Get the shipping method.
   $shipping_method = NULL;
   foreach ($printful_shipping_services as $machine_name => $service) {
-    if (!empty($service['request_name'])) {
+    if (!empty($service['request_name']) && !empty($shipping_data['shipping_service'])) {
       if (
         $shipping_data['shipping_service']['name'] == $service['commerce_shipping_id']
           ||
@@ -736,7 +730,7 @@ function commerce_printful_media_element_process($element, &$form_state, $form) 
 
         $wrapper = entity_metadata_wrapper('commerce_product', $element['#entity']);
 
-        if ($wrapper->field_printful_mockups->count() > 0) {
+        if ($wrapper->field_printful_print_files->count() > 0) {
           $element['settings'] = array(
             '#type' => 'link',
             '#href' => 'commerce-printful/print-file-settings/' . $product_id . '/' . $fid . '/' . $element['#weight'] . '/nojs',
@@ -797,10 +791,8 @@ function commerce_printful_generate_mockups(&$form, $form_state) {
   $product = $form['#entity'];
   $wrapper = entity_metadata_wrapper('commerce_product', $product);
 
-  // Get the Printful variant_id from the SKU.
-  $identifiers = explode('-', $product->sku);
-  $printful_product_id = $identifiers[0];
-  $printful_variant_id = $identifiers[1];
+  $printful_product_id = $wrapper->field_printful_product_id->value();
+  $printful_variant_id = $wrapper->field_printful_variant_id->value();
 
   // Get the printfiles for the product.
   $printfiles = commerce_printful_printfiles($printful_product_id);

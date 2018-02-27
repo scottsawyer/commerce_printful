@@ -69,19 +69,23 @@ function drush_commerce_printful_printful_sync_products() {
       // Loop over each variant and create new SKU if needed.
       foreach ($variants['sync_variants'] as $variant) {
 
-        // We dynamically create a SKU from the Printful IDs.
-        $sku = $variant['product']['product_id'] . '-' . $variant['product']['variant_id'];
-        drush_print('Checking for SKU: ' . $sku);
+        drush_print('Checking for product - Product ID: ' . $variant['product']['product_id'] . ' Variant ID: ' . $variant['product']['variant_id']);
 
-        $commerce_product = commerce_product_load_by_sku($sku);
+        $query = new EntityFieldQuery();
+        $commerce_product = $query->entityCondition('entity_type', 'commerce_product')
+          ->entityCondition('bundle', 'printful')
+          ->fieldCondition('field_printful_product_id', 'value', $variant['product']['product_id'])
+          ->fieldCondition('field_printful_variant_id', 'value', $variant['product']['variant_id'])
+          ->execute();
+
         if (!$commerce_product) {
           drush_print('Creating new product.');
           $wrapper = entity_metadata_wrapper('commerce_product', commerce_product_new('printful'));
 
-          // The SKU title is a concatenation of the Product
-          // and Variant names.
-          $wrapper->title = $product['name'] . ' (' . $variant['name'] . ')';
-          $wrapper->sku = $sku;
+          $wrapper->title = $variant['name'];
+          $wrapper->sku = $variant['product']['product_id'] . '-' . $variant['product']['variant_id'];
+          $wrapper->field_printful_product_id = $variant['product']['product_id'];
+          $wrapper->field_printful_variant_id = $variant['product']['variant_id'];
 
           // As best I can tell, Printful doesn't provide the
           // retail price in its API responses. Set a default
@@ -97,6 +101,8 @@ function drush_commerce_printful_printful_sync_products() {
 
         }
         else {
+          $product_id = current($commerce_product['commerce_product'])->product_id;
+          $commerce_product = commerce_product_load($product_id);
           $wrapper = entity_metadata_wrapper('commerce_product', $commerce_product);
         }
         $product_ids[] = $wrapper->product_id->value();
