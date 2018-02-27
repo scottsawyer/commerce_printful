@@ -8,6 +8,10 @@
 use Printful\Exceptions\PrintfulApiException;
 use Printful\Exceptions\PrintfulException;
 use Printful\PrintfulApiClient;
+use Printful\PrintfulMockupGenerator;
+use Printful\Structures\Generator\MockupGenerationParameters;
+use Printful\Structures\Generator\MockupPositionItem;
+use Printful\Structures\Placements;
 
 /**
  * Implements hook_menu().
@@ -16,6 +20,7 @@ use Printful\PrintfulApiClient;
  */
 function commerce_printful_menu() {
   $items = array();
+
   $items['admin/commerce/config/printful'] = array(
     'title' => 'Printful',
     'description' => 'Configure the Printful API integration.',
@@ -27,6 +32,16 @@ function commerce_printful_menu() {
     'context' => MENU_CONTEXT_INLINE,
     'weight' => 0,
   );
+
+  $items['commerce-printful/print-file-settings/%/%/%/%ctools_js'] = array(
+    'title' => 'Settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('commerce_printful_print_file_settings_modal', 2, 3, 4, 5),
+    'theme callback' => 'ajax_base_page_theme',
+    'access arguments' => array('administer commerce printful'),
+    'type' => MENU_CALLBACK,
+  );
+
   return $items;
 }
 
@@ -691,4 +706,408 @@ function commerce_printful_shipping_service_list() {
     ),
   );
   return $services;
+}
+
+/**
+ * Implements hook_element_info_alter().
+ */
+function commerce_printful_element_info_alter(&$type) {
+  if (isset($type['media'])) {
+    $type['media']['#process'][] = 'commerce_printful_media_element_process';
+  }
+}
+
+/**
+ * Process callback for the media form element.
+ */
+function commerce_printful_media_element_process($element, &$form_state, $form) {
+  if (isset($element['#field_name'])) {
+    switch ($element['#field_name']) {
+      case 'field_printful_print_files':
+
+        $product_id = isset($element['#entity']) ? $element['#entity']->product_id : 0;
+        $fid = isset($element['#value']['fid']) ? $element['#value']['fid'] : 0;
+
+        $wrapper = entity_metadata_wrapper('commerce_product', $element['#entity']);
+
+        if ($wrapper->field_printful_mockups->count() > 0) {
+          $element['settings'] = array(
+            '#type' => 'link',
+            '#href' => 'commerce-printful/print-file-settings/' . $product_id . '/' . $fid . '/' . $element['#weight'] . '/nojs',
+            '#title' => t('Settings'),
+            '#attributes' => array(
+              'class' => array(
+                'ctools-use-modal',
+                'ctools-modal-commerce-printful-print-file-settings', 'button', 'settings',
+              ),
+            ),
+            '#weight' => 20,
+            '#access' => $element['#file'] ? file_entity_access('update', $element['#file']) : FALSE,
+          );
+
+          $element['generate_mockups_button'] = array(
+            '#name' => implode('_', $element['#parents']) . '_generate_button',
+            '#type' => 'submit',
+            '#value' => t('Generate mockup images'),
+            '#validate' => array(),
+            '#submit' => array('commerce_printful_generate_mockups'),
+            '#weight' => 40,
+            '#access' => $element['#file'] ? file_entity_access('update', $element['#file']) : FALSE,
+            '#attributes' => array('class' => array('remove')),
+          );
+        }
+
+        break;
+
+      case 'field_printful_mockups':
+        $fid = isset($element['#value']['fid']) ? $element['#value']['fid'] : 0;
+        $file = file_load($fid);
+        if ($file) {
+          $file_url = file_create_url($file->uri);
+          $element['preview']['#prefix'] .= '<a href="' . $file_url . '">';
+          $element['preview']['#suffix'] .= '</a>';
+        }
+        break;
+    }
+  }
+  return $element;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function commerce_printful_form_commerce_product_ui_product_form_alter(&$form, $form_state) {
+
+  // Add a div to target for displaying status messages.
+  $form['field_printful_print_files']['#prefix'] = '<div class="print-file-settings-message-wrapper"></div>';
+
+}
+
+/**
+ * Submit handler to generate the mockup.
+ */
+function commerce_printful_generate_mockups(&$form, $form_state) {
+
+  $product = $form['#entity'];
+  $wrapper = entity_metadata_wrapper('commerce_product', $product);
+
+  // Get the Printful variant_id from the SKU.
+  $identifiers = explode('-', $product->sku);
+  $printful_product_id = $identifiers[0];
+  $printful_variant_id = $identifiers[1];
+
+  // Get the printfiles for the product.
+  $printfiles = commerce_printful_printfiles($printful_product_id);
+
+  // Find the printfile_id for this variant's front.
+  $variant_printfile_id = NULL;
+  if (!empty($printfiles['variant_printfiles'])) {
+    foreach($printfiles['variant_printfiles'] as $vpf) {
+      if (!empty($vpf['variant_id']) && $vpf['variant_id'] == $printful_variant_id) {
+        if (!empty($vpf['placements']['front'])) {
+          $variant_printfile_id = $vpf['placements']['front'];
+          break;
+        }
+      }
+    }
+  }
+
+  // Get the printfile from the printfile_id.
+  $printfile = NULL;
+  if (!empty($variant_printfile_id) && !empty($printfiles['printfiles'])) {
+    foreach ($printfiles['printfiles'] as $pf) {
+      if (!empty($pf['printfile_id']) && $pf['printfile_id'] == $variant_printfile_id) {
+        $printfile = $pf;
+      }
+    }
+  }
+
+  $delta = abs((int) filter_var($form_state['clicked_button']['#name'], FILTER_SANITIZE_NUMBER_INT));
+  $printfile_image = $wrapper->field_printful_print_files[$delta]->value();
+  $printfile_image_url = file_create_url($printfile_image['uri']);
+
+  $settings = db_select('commerce_printful_print_file_settings', 'pfs')
+    ->fields('pfs', array('print_file_settings'))
+    ->condition('pfs.product_id', $product->product_id)
+    ->condition('pfs.fid', $printfile_image['fid'])
+    ->condition('pfs.delta', $delta)
+    ->execute()
+    ->fetchField();
+  $settings = unserialize($settings);
+
+  $mockup_width = 0;
+  $mockup_height = 0;
+
+  $ratio = $printfile_image['width'] / $printfile_image['height'];
+  $scale = isset($settings['scale_percentage']) ? ($settings['scale_percentage'] * .01) : 0;
+
+  if ($printfile['width'] / $printfile['height'] > $ratio) {
+    $mockup_width = round($printfile['height'] * $ratio);
+    $mockup_height = $printfile['height'];
+  }
+  else {
+    $mockup_height = round($printfile['width'] / $ratio);
+    $mockup_width = $printfile['width'];
+  }
+
+  // Submit the task.
+  $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
+  $generator = new PrintfulMockupGenerator($pf);
+
+  $parameters = new MockupGenerationParameters;
+  $parameters->format = $parameters::FORMAT_PNG;
+  $parameters->productId = $printful_product_id;
+  $parameters->variantIds = array($printful_variant_id);
+
+  $scaled_width = ($mockup_width - ($mockup_width * $scale));
+  $scaled_height = ($mockup_height - ($mockup_height * $scale));
+
+  $width_difference = $printfile['width'] - $scaled_width;
+  $height_difference = $printfile['height'] - $scaled_height;
+
+  $center_vertically = isset($settings['center_vertically']) ? ($settings['center_vertically'] * .01) : 0;
+  $center_horizontally = isset($settings['center_horizontally']) ? ($settings['center_horizontally'] * .01) : 0;
+
+  $left_offset = isset($settings['left_offset']) ? $settings['left_offset'] : 0;
+  $top_offset = isset($settings['top_offset']) ? $settings['top_offset'] : 0;
+
+  $position = new MockupPositionItem;
+  $position->areaWidth = $printfile['width'];
+  $position->areaHeight = $printfile['height'];
+  $position->width = $scaled_width;
+  $position->height = $scaled_height;
+
+  $position->top = !empty($center_vertically) ? ($height_difference / 2) : $top_offset;
+  $position->left = !empty($center_horizontally) ? ($width_difference / 2) : $left_offset;
+
+  $parameters->addImageUrl(Placements::TYPE_FRONT, $printfile_image_url, $position);
+
+  try {
+    $result = $generator->createGenerationTaskAndWaitForResult($parameters)->mockupList;
+  }
+  catch (PrintfulApiException $e) {
+    watchdog('commerce_printful', 'Printful API Exception: %code %message', array('%code' => $e->getCode(), '%message' => $e->getMessage()));
+  }
+  catch (PrintfulException $e) {
+    watchdog('commerce_printful', 'Printful Exception: %message', array('%message' => $e->getMessage()));
+    watchdog('commerce_printful', $pf->getLastResponseRaw());
+  }
+
+  $mockup_field_instance = field_info_instance('commerce_product', 'field_mockup_images', 'printful');
+
+  $mockup_images = array();
+  if (!empty($result)) {
+    if (!empty($result->mockups[0])) {
+      $mockup_images[] = $result->mockups[0]->mockupUrl;
+    } 
+    if (!empty($result->mockups[0]->extraMockups) && is_array($result->mockups[0]->extraMockups)) {
+      foreach ($result->mockups[0]->extraMockups as $extra_mockup) {
+        $mockup_images[] = $extra_mockup->url;
+      }
+    }
+  }
+
+  $destination = 'public://' . (!empty($mockup_field_instance['settings']['file_directory']) ? $mockup_field_instance['settings']['file_directory'] : '');
+  file_prepare_directory($destination, FILE_CREATE_DIRECTORY);
+
+  // TODO
+  // Switch to system_retrieve_file()
+
+  $mockup_files = array();
+  foreach ($mockup_images as $delta => $mockup_image) {
+    $image = file_get_contents($mockup_image);
+    if ($image) {
+      $file = file_save_data($image, $destination . '/' . basename($mockup_image), FILE_EXISTS_REPLACE);
+      $mockup_files[] = (array) $file;
+    }
+  }
+
+  $wrapper->field_printful_mockups->set($mockup_files);
+  $wrapper->save();
+
+  drupal_set_message('Mockup images added.', 'status');
+  unset($_GET['destination']);
+  drupal_goto('admin/commerce/products/' . $product->product_id . '/edit');
+}
+
+/**
+ * Get printfiles data for a Printful product.
+ */
+function commerce_printful_printfiles($printful_product_id) {
+  $printfiles = array();
+  if (!empty($printful_product_id)) {
+    $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
+    try {
+      $printfiles = $pf->get('mockup-generator/printfiles/' . $printful_product_id);
+    }
+    catch (PrintfulApiException $e) {
+      drupal_set_message('Printful API Exception: %code %message', array('%code' => $e->getCode(), '%message' => $e->getMessage()), 'error');
+    }
+    catch (PrintfulException $e) {
+      drupal_set_message('Printful Exception: %message', array('%message' => $e->getMessage()), 'error');
+      drupal_set_message($pf->getLastResponseRaw(), 'error');
+    }
+  }
+  return $printfiles;
+}
+
+/**
+ * CTools modal callback for editing a file.
+ */
+function commerce_printful_print_file_settings_modal($form, &$form_state, $product_id = 0, $fid = 0, $delta = 0, $js) {
+  ctools_include('modal');
+  ctools_include('ajax');
+
+  $form_state = array(
+    'title' => t('Settings'),
+    'ajax' => $js,
+    'build_info' => array(
+      'args' => array(
+        '0' => $product_id,
+        '1' => $fid,
+        '2' => $delta,
+      ),
+    ),
+  );
+
+  $output = ctools_modal_form_wrapper('commerce_printful_print_file_settings_form', $form_state);
+
+  if ($js) {
+    $commands = $output;
+
+    if ($form_state['executed']) {
+      $commands = array(ctools_modal_command_dismiss());
+      drupal_set_message(t('Settings saved.'), 'status');
+      $commands[] = ajax_command_html('.print-file-settings-message-wrapper', theme('status_messages'));
+    }
+
+    print ajax_render($commands);
+    exit();
+  }
+
+  // Otherwise, just return the output.
+  return $output;
+}
+
+function commerce_printful_print_file_settings_form($form, $form_state) {
+
+  if (!is_array($form_state['build_info']['args']) || count($form_state['build_info']['args']) != 3) {
+    return;
+  }
+
+  $product_id = $form_state['build_info']['args'][0];
+  $fid = $form_state['build_info']['args'][1];
+  $delta = $form_state['build_info']['args'][2];
+
+  $settings = db_select('commerce_printful_print_file_settings', 'pfs')
+    ->fields('pfs', array('print_file_settings'))
+    ->condition('pfs.product_id', $product_id)
+    ->condition('pfs.fid', $fid)
+    ->condition('pfs.delta', $delta)
+    ->execute()
+    ->fetchField();
+  $settings = unserialize($settings);
+
+  $placement_options = array(
+    'front' => t('Front'),
+    'back' => t('Back'),
+  );
+
+  $form['placement'] = array(
+    '#title' => t('Placement'),
+    '#type' => 'select',
+    '#description' => t('Determines the placement of the print file on the product.'),
+    '#options' => $placement_options,
+    '#default_value' => isset($settings['placement']) ? $settings['placement'] : 'front',
+  );
+
+  $form['scale_percentage'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Scale percentage'),
+    '#size' => 4,
+    '#field_suffix' => '%',
+    '#maxlength' => 2,
+    '#description' => t('Scales down the print file relative to the full print area.'),
+    '#default_value' => isset($settings['scale_percentage']) ? $settings['scale_percentage'] : 0,
+  );
+
+  $form['center_vertically'] = array(
+    '#type' =>'checkbox',
+    '#title' => t('Center vertically'),
+    '#description' => t('Centers the print file relative to the full print area.'),
+    '#default_value' => isset($settings['center_vertically']) ? $settings['center_vertically'] : NULL,
+  );
+
+  $form['center_horizontally'] = array(
+    '#type' =>'checkbox',
+    '#title' => t('Center horizontally'),
+    '#description' => t('Centers the print file relative to the full print area.'),
+    '#default_value' => isset($settings['center_horizontally']) ? $settings['center_horizontally'] : NULL,
+  );
+
+  $form['left_offset'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Left offset'),
+    '#size' => 4,
+    '#field_suffix' => 'px',
+    '#description' => t('Positions the print file this number of pixels from the left side of the print area. The value is ignored when center horizontally is checked.'),
+    '#default_value' => isset($settings['left_offset']) ? $settings['left_offset'] : 0,
+  );
+
+  $form['top_offset'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Top offset'),
+    '#size' => 4,
+    '#field_suffix' => 'px',
+    '#description' => t('Positions the print file this number of pixels from the top of the print area. The value is ignored when center vertically is checked.'),
+    '#default_value' => isset($settings['top_offset']) ? $settings['top_offset'] : 0,
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+  );
+
+  return $form;
+}
+
+function commerce_printful_print_file_settings_form_submit($form, $form_state) {
+
+  if (!is_array($form_state['build_info']['args']) || count($form_state['build_info']['args']) != 3) {
+    return;
+  }
+
+  $product_id = $form_state['build_info']['args'][0];
+  $fid = $form_state['build_info']['args'][1];
+  $delta = $form_state['build_info']['args'][2];
+
+  $values = array(
+    'placement',
+    'scale_percentage',
+    'center_vertically',
+    'center_horizontally',
+    'left_offset',
+    'top_offset',
+  );
+
+  $settings = array();
+  foreach ($values as $value) {
+    $settings[$value] = isset($form_state['values'][$value]) ? $form_state['values'][$value] : NULL;
+  }
+
+  db_delete('commerce_printful_print_file_settings')
+  ->condition('product_id', $product_id)
+  ->condition('fid', $fid)
+  ->condition('delta', $delta)
+  ->execute();
+
+  db_insert('commerce_printful_print_file_settings')
+    ->fields(array(
+      'product_id' => $product_id,
+      'fid' => $fid,
+      'delta' => $delta,
+      'print_file_settings' => serialize($settings),
+    ))
+    ->execute();
+
 }
