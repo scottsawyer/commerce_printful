@@ -376,6 +376,15 @@ function commerce_printful_commerce_checkout_complete($order) {
       if ($product->type == 'printful') {
         $product_wrapper = entity_metadata_wrapper('commerce_product', $product);
 
+        $mockup_url = NULL;
+        $mockup = $product_wrapper->field_printful_mockups[0]->value();
+        if ($mockup) {
+          $style = 'large';
+          $style_uri = image_style_path($style, $mockup['uri']);
+          $success = file_exists($style_uri) || image_style_create_derivative(image_style_load($style), $mockup['uri'], $style_uri);
+          $mockup_url = file_create_url($style_uri);
+        }
+
         $price = $line_item_wrapper->commerce_unit_price->value();
 
         $items[] = array(
@@ -386,7 +395,7 @@ function commerce_printful_commerce_checkout_complete($order) {
           'quantity' => (int) $line_item_wrapper->quantity->value(),
           'retail_price' => commerce_currency_amount_to_decimal($price['amount'], $currency_code),
           'files' => array(
-            array('url' => 'http://example.com/files/posters/poster_1.jpg'),
+            array('url' => $mockup_url),
           ),
         );
 
@@ -778,9 +787,25 @@ function commerce_printful_media_element_process($element, &$form_state, $form) 
  */
 function commerce_printful_form_commerce_product_ui_product_form_alter(&$form, $form_state) {
 
+  $form['actions']['apply'] = array(
+    '#type' => 'submit',
+    '#value' => t('Apply changes'),
+    '#submit' => array('commerce_product_product_form_submit', 'commerce_printful_form_commerce_product_ui_apply'),
+    '#weight' => -1,
+  );
+
   // Add a div to target for displaying status messages.
   $form['field_printful_print_files']['#prefix'] = '<div class="print-file-settings-message-wrapper"></div>';
 
+}
+
+/**
+ * Submit handler for apply button.
+ */
+function commerce_printful_form_commerce_product_ui_apply(&$form, $form_state) {
+  $product_id = $form['#entity']->product_id;
+  unset($_GET['destination']);
+  drupal_goto('admin/commerce/products/' . $product_id . '/edit');
 }
 
 /**
@@ -801,7 +826,7 @@ function commerce_printful_call_generate_mockups(&$form, $form_state) {
   drupal_goto('admin/commerce/products/' . $product_id . '/edit');
 
 }
- 
+
 /**
  * Mockup generator.
  */

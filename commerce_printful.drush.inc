@@ -26,10 +26,10 @@ function commerce_printful_drush_command() {
     'description' => 'Generate mockup images for a given product.',
     'aliases' => ['pgm'],
     'arguments' => [
-       'sku' => 'The Commerce Product SKU.',
-       'delta' => 'The delta of the desired print file for which to generate mockups.',
-       'base_url' => 'The base URL for Printful to access the print file image.',
-     ],
+      'sku' => 'The Commerce Product SKU.',
+      'delta' => 'The delta of the desired print file for which to generate mockups.',
+      'base_url' => 'The base URL for Printful to access the print file image.',
+    ],
   ];
   return $commands;
 }
