@@ -408,7 +408,7 @@ function commerce_printful_commerce_checkout_complete($order) {
   foreach ($printful_shipping_services as $machine_name => $service) {
     if (!empty($service['request_name']) && !empty($shipping_data['shipping_service'])) {
       if (
-        $shipping_data['shipping_service']['name'] == $service['commerce_shipping_id']
+        (!empty($service['commerce_shipping_id']) && $shipping_data['shipping_service']['name'] == $service['commerce_shipping_id'])
           ||
         $shipping_data['shipping_service']['name'] == $machine_name
       ) {
@@ -750,7 +750,7 @@ function commerce_printful_media_element_process($element, &$form_state, $form) 
             '#type' => 'submit',
             '#value' => t('Generate mockup images'),
             '#validate' => array(),
-            '#submit' => array('commerce_printful_generate_mockups'),
+            '#submit' => array('commerce_printful_call_generate_mockups'),
             '#weight' => 40,
             '#access' => $element['#file'] ? file_entity_access('update', $element['#file']) : FALSE,
             '#attributes' => array('class' => array('remove')),
@@ -786,16 +786,35 @@ function commerce_printful_form_commerce_product_ui_product_form_alter(&$form, $
 /**
  * Submit handler to generate the mockup.
  */
-function commerce_printful_generate_mockups(&$form, $form_state) {
+function commerce_printful_call_generate_mockups(&$form, $form_state) {
 
-  $product = $form['#entity'];
+  $product_id = $form['#entity']->product_id;
+  $wrapper = entity_metadata_wrapper('commerce_product', $form['#entity']);
+  $delta = abs((int) filter_var($form_state['clicked_button']['#name'], FILTER_SANITIZE_NUMBER_INT));
+  $printfile_image = $wrapper->field_printful_print_files[$delta]->value();
+  $api_key = variable_get('commerce_printful_api_key', '');
+
+  $result = commerce_printful_generate_mockups($product_id, $printfile_image['fid'], $delta, $api_key);
+
+  drupal_set_message(($result ? 'Mockup images added.' : 'Error generating mockups. Please check the system log for more details.'), 'status');
+  unset($_GET['destination']);
+  drupal_goto('admin/commerce/products/' . $product_id . '/edit');
+
+}
+ 
+/**
+ * Mockup generator.
+ */
+function commerce_printful_generate_mockups($product_id, $fid, $delta, $api_key, $base_url) {
+
+  $product = commerce_product_load($product_id);
   $wrapper = entity_metadata_wrapper('commerce_product', $product);
 
   $printful_product_id = $wrapper->field_printful_product_id->value();
   $printful_variant_id = $wrapper->field_printful_variant_id->value();
 
   // Get the printfiles for the product.
-  $printfiles = commerce_printful_printfiles($printful_product_id);
+  $printfiles = commerce_printful_printfiles($printful_product_id, $api_key);
 
   // Find the printfile_id for this variant's front.
   $variant_printfile_id = NULL;
@@ -820,9 +839,12 @@ function commerce_printful_generate_mockups(&$form, $form_state) {
     }
   }
 
-  $delta = abs((int) filter_var($form_state['clicked_button']['#name'], FILTER_SANITIZE_NUMBER_INT));
   $printfile_image = $wrapper->field_printful_print_files[$delta]->value();
   $printfile_image_url = file_create_url($printfile_image['uri']);
+
+  if (!empty($base_url)) {
+    $printfile_image_url = $base_url . parse_url($printfile_image_url, PHP_URL_PATH);
+  }
 
   $settings = db_select('commerce_printful_print_file_settings', 'pfs')
     ->fields('pfs', array('print_file_settings'))
@@ -849,7 +871,7 @@ function commerce_printful_generate_mockups(&$form, $form_state) {
   }
 
   // Submit the task.
-  $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
+  $pf = new PrintfulApiClient($api_key);
   $generator = new PrintfulMockupGenerator($pf);
 
   $parameters = new MockupGenerationParameters();
@@ -885,13 +907,13 @@ function commerce_printful_generate_mockups(&$form, $form_state) {
   }
   catch (PrintfulApiException $e) {
     watchdog('commerce_printful', 'Printful API Exception: %code %message', array('%code' => $e->getCode(), '%message' => $e->getMessage()));
+    return FALSE;
   }
   catch (PrintfulException $e) {
     watchdog('commerce_printful', 'Printful Exception: %message', array('%message' => $e->getMessage()));
     watchdog('commerce_printful', $pf->getLastResponseRaw());
+    return FALSE;
   }
-
-  $mockup_field_instance = field_info_instance('commerce_product', 'field_mockup_images', 'printful');
 
   $mockup_images = array();
   if (!empty($result)) {
@@ -905,6 +927,7 @@ function commerce_printful_generate_mockups(&$form, $form_state) {
     }
   }
 
+  $mockup_field_instance = field_info_instance('commerce_product', 'field_mockup_images', 'printful');
   $destination = 'public://' . (!empty($mockup_field_instance['settings']['file_directory']) ? $mockup_field_instance['settings']['file_directory'] : '');
   file_prepare_directory($destination, FILE_CREATE_DIRECTORY);
 
@@ -923,18 +946,16 @@ function commerce_printful_generate_mockups(&$form, $form_state) {
   $wrapper->field_printful_mockups->set($mockup_files);
   $wrapper->save();
 
-  drupal_set_message('Mockup images added.', 'status');
-  unset($_GET['destination']);
-  drupal_goto('admin/commerce/products/' . $product->product_id . '/edit');
+  return TRUE;
 }
 
 /**
  * Get printfiles data for a Printful product.
  */
-function commerce_printful_printfiles($printful_product_id) {
+function commerce_printful_printfiles($printful_product_id = 0, $api_key = '') {
   $printfiles = array();
   if (!empty($printful_product_id)) {
-    $pf = new PrintfulApiClient(variable_get('commerce_printful_api_key', ''));
+    $pf = new PrintfulApiClient($api_key);
     try {
       $printfiles = $pf->get('mockup-generator/printfiles/' . $printful_product_id);
     }

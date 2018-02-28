@@ -22,7 +22,15 @@ function commerce_printful_drush_command() {
     'description' => 'Sync Printful products to Drupal Commerce products.',
     'aliases' => ['psp'],
   ];
-
+  $commands['printful-generate-mockups'] = [
+    'description' => 'Generate mockup images for a given product.',
+    'aliases' => ['pgm'],
+    'arguments' => [
+       'sku' => 'The Commerce Product SKU.',
+       'delta' => 'The delta of the desired print file for which to generate mockups.',
+       'base_url' => 'The base URL for Printful to access the print file image.',
+     ],
+  ];
   return $commands;
 }
 
@@ -138,6 +146,33 @@ function drush_commerce_printful_printful_sync_products() {
     dt('Printful Exception: ' . $e->getMessage());
     drush_print_r($pf->getLastResponseRaw());
   }
+}
+
+/**
+ * Logic for the generate mockups command.
+ */
+function drush_commerce_printful_printful_generate_mockups($sku, $delta, $base_url) {
+
+  // Do we have a SKU argument?
+  if (empty($sku)) {
+    drush_print('Missing SKU argument.');
+    return;
+  }
+
+  // Load and verify the Commerce Product.
+  $product = commerce_product_load_by_sku($sku);
+  if (empty($product->product_id)) {
+    drush_print('Invalid SKU argument.');
+    return;
+  }
+
+  $product_wrapper = entity_metadata_wrapper('commerce_product', $product);
+
+  // Get the print file data so we have the fid.
+  $print_file = $product_wrapper->field_printful_print_files[$delta]->value();
+
+  $generate = commerce_printful_generate_mockups($product->product_id, $print_file['fid'], $delta, drush_commerce_printful_get_key(), $base_url);
+
 }
 
 /**

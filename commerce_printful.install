@@ -154,14 +154,14 @@ function commerce_printful_install() {
       'entity_type' => 'commerce_product',
       'bundle' => 'printful',
       'label' => $t('Product ID'),
-      'widget' => array('type' => 'text_textfield', 'settings' => array('size' => '20')),
+      'widget' => array('type' => 'text_textfield', 'settings' => array('size' => '10')),
     ),
     'field_printful_variant_id' => array(
       'field_name' => 'field_printful_variant_id',
       'entity_type' => 'commerce_product',
       'bundle' => 'printful',
       'label' => $t('Variant ID'),
-      'widget' => array('type' => 'text_textfield', 'settings' => array('size' => '20')),
+      'widget' => array('type' => 'text_textfield', 'settings' => array('size' => '10')),
     ),
     'field_printful_products' => array(
       'field_name' => 'field_printful_products',
@@ -181,7 +181,7 @@ function commerce_printful_install() {
       'field_name' => 'field_printful_mockups',
       'entity_type' => 'commerce_product',
       'bundle' => 'printful',
-      'label' => $t('Mockup images'),
+      'label' => $t('Mockups'),
       'widget' => array('type' => 'media_generic'),
     ),
   );
