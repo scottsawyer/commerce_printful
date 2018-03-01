@@ -345,6 +345,11 @@ function commerce_printful_commerce_price_component_type_info() {
  * for fulfillment.
  */
 function commerce_printful_commerce_checkout_complete($order) {
+
+  if (!commerce_printful_is_printful_order($order)) {
+    return;
+  }
+
   $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
   $currency_code = $order_wrapper->commerce_order_total->currency_code->value();
 
