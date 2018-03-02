@@ -18,12 +18,6 @@ function commerce_printful_schema() {
         'unsigned' => TRUE,
         'not null' => TRUE,
       ),
-      'fid' => array(
-        'description' => 'The primary identifier for a file.',
-        'type' => 'int',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-      ),
       'delta' => array(
         'description' => 'The delta of the print file image the settings are for.',
         'type' => 'int',
@@ -39,10 +33,9 @@ function commerce_printful_schema() {
     ),
     'indexes' => array(
       'product_id' => array('product_id'),
-      'fid' => array('fid'),
       'delta' => array('delta'),
     ),
-    'primary key' => array('product_id', 'fid', 'delta'),
+    'primary key' => array('product_id', 'delta'),
   );
 
   return $schema;
@@ -135,7 +128,9 @@ function commerce_printful_install() {
     'field_printful_print_files' => array(
       'field_name' => 'field_printful_print_files',
       'type' => 'image',
-      'cardinality' => -1,
+      // We set this to the maximum number of print files and then limit
+      // the number displayed in the UI to match the response from the API.
+      'cardinality' => 6,
     ),
     'field_printful_mockups' => array(
       'field_name' => 'field_printful_mockups',

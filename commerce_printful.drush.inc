@@ -27,7 +27,6 @@ function commerce_printful_drush_command() {
     'aliases' => ['pgm'],
     'arguments' => [
       'sku' => 'The Commerce Product SKU.',
-      'delta' => 'The delta of the desired print file for which to generate mockups.',
       'base_url' => 'The base URL for Printful to access the print file image.',
     ],
   ];
@@ -151,7 +150,7 @@ function drush_commerce_printful_printful_sync_products() {
 /**
  * Logic for the generate mockups command.
  */
-function drush_commerce_printful_printful_generate_mockups($sku, $delta, $base_url) {
+function drush_commerce_printful_printful_generate_mockups($sku, $base_url) {
 
   // Do we have a SKU argument?
   if (empty($sku)) {
@@ -166,13 +165,7 @@ function drush_commerce_printful_printful_generate_mockups($sku, $delta, $base_u
     return;
   }
 
-  $product_wrapper = entity_metadata_wrapper('commerce_product', $product);
-
-  // Get the print file data so we have the fid.
-  $print_file = $product_wrapper->field_printful_print_files[$delta]->value();
-
-  $generate = commerce_printful_generate_mockups($product->product_id, $print_file['fid'], $delta, drush_commerce_printful_get_key(), $base_url);
-
+  $generate = commerce_printful_generate_mockups($product->product_id, drush_commerce_printful_get_key(), $base_url);
 }
 
 /**
