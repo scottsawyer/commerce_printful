@@ -9,6 +9,7 @@ dependencies[] = commerce_shipping
 dependencies[] = commerce_product_ui
 dependencies[] = commerce_tax
 dependencies[] = composer_manager
+dependencies[] = media
 
 package = Commerce (contrib)
 configure = admin/commerce/config/printful

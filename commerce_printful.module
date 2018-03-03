@@ -1029,6 +1029,7 @@ function commerce_printful_generate_mockups($product_id, $api_key, $base_url = N
     if ($image) {
       $file = file_save_data($image, $destination . '/' . basename($mockup_image), FILE_EXISTS_REPLACE);
       $mockup_files[] = (array) $file;
+      image_path_flush($file->uri);
     }
   }
 
