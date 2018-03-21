@@ -379,13 +379,10 @@ function commerce_printful_commerce_checkout_complete($order) {
       if ($product->type == 'printful') {
         $product_wrapper = entity_metadata_wrapper('commerce_product', $product);
 
-        $mockup_url = NULL;
-        $mockup = $product_wrapper->field_printful_mockups[0]->value();
-        if ($mockup) {
-          $style = 'large';
-          $style_uri = image_style_path($style, $mockup['uri']);
-          $success = file_exists($style_uri) || image_style_create_derivative(image_style_load($style), $mockup['uri'], $style_uri);
-          $mockup_url = file_create_url($style_uri);
+        $files = array();
+        $print_files = $product_wrapper->field_printful_print_files->value();
+        foreach ($print_files as $delta => $file) {
+          $files[] = array('url' => file_create_url($file['uri']));
         }
 
         $price = $line_item_wrapper->commerce_unit_price->value();
@@ -397,9 +394,7 @@ function commerce_printful_commerce_checkout_complete($order) {
           'sku' => $product->sku,
           'quantity' => (int) $line_item_wrapper->quantity->value(),
           'retail_price' => commerce_currency_amount_to_decimal($price['amount'], $currency_code),
-          'files' => array(
-            array('url' => $mockup_url),
-          ),
+          'files' => array($files[0]),
         );
 
       }
@@ -887,67 +882,51 @@ function commerce_printful_generate_mockups($product_id, $api_key, $base_url = N
 
   $field_values = $wrapper->field_printful_print_files->value();
 
-  $files = array();
-  foreach ($field_values as $delta => $file) {
-
-    $settings = commerce_printful_get_print_file_settings($product_id, $delta);
-
-    if (!empty($settings['printfile_id'])) {
-      $image_url = file_create_url($file['uri']);
-      if (!empty($base_url)) {
-        $image_url = $base_url . parse_url($image_url, PHP_URL_PATH);
-      }
-      $files[$settings['printfile_id']] = array(
-        'file' => $file,
-        'image_url' => $image_url,
-        'settings' => $settings,
-      );
-    }
-
-  }
-
-  if (empty($files)) {
-    watchdog('commerce_printful', 'No print files found.');
-    return FALSE;
-  }
-
-  // Get the printfiles for the product.
-  $response = commerce_printful_printfiles($printful_product_id, $api_key);
-
-  // Submit the task.
+  // Prepare the request.
   $pf = new PrintfulApiClient($api_key);
   $generator = new PrintfulMockupGenerator($pf);
   $parameters = new MockupGenerationParameters();
 
-  $request_files = array();
-  if (!empty($response['printfiles'])) {
-    foreach ($response['printfiles'] as $delta => $printfile) {
+  foreach ($field_values as $delta => $file) {
+    $settings = commerce_printful_get_print_file_settings($product_id, $delta);
 
-      if (!array_key_exists($printfile['printfile_id'], $files)) {
-        continue;
-      }
+    if (!empty($settings['printfile_id'])) {
 
-      $file = $files[$printfile['printfile_id']];
-
-      $variant_printfile = array();
-      if (!empty($response['variant_printfiles'])) {
-        foreach ($response['variant_printfiles'] as $value) {
-          if ($value['variant_id'] == $printful_variant_id) {
-            $variant_printfile = $value;
-            break;
-          }
+      // Get the printfile for this variant.
+      $printfile = array();
+      foreach ($settings['printfiles'] as $printfile_data) {
+        if ($printfile_data['printfile_id'] == $settings['printfile_id']) {
+          $printfile = $printfile_data;
         }
       }
 
-      if (isset($file['settings']['placement']) && in_array($file['settings']['placement'], array_keys($variant_printfile['placements']))) {
+      // Get the URL to the printfile.
+      $image_url = file_create_url($file['uri']);
+      if (!empty($base_url)) {
+        $image_url = $base_url . parse_url($image_url, PHP_URL_PATH);
+      }
 
-        $mockup_width = 0;
-        $mockup_height = 0;
+      $mockup_width = 0;
+      $mockup_height = 0;
 
-        $ratio = $file['file']['width'] / $file['file']['height'];
-        $scale = isset($file['settings']['scale_percentage']) ? ($file['settings']['scale_percentage'] * .01) : 0;
+      $ratio = $file['width'] / $file['height'];
+      $scale = isset($settings['scale_percentage']) ? ($settings['scale_percentage'] * .01) : 0;
 
-        if ($printfile['width'] / $printfile['height'] > $ratio) {
+      if (!empty($settings['stretch'])) {
+        // Stretch horizontally.
+        if ($settings['stretch'] == 1) {
+          $mockup_width = $printfile['width'];
+          $mockup_height = round($printfile['width'] / $ratio);
+        }
+        // Stretch vertically.
+        else {
+          $mockup_width = round($printfile['height'] * $ratio);
+          $mockup_height = $printfile['height'];
+        }
+      }
+      else {
+        // Scale the printfile to match the ratio of the print area.
+        if ((!empty($settings['stretch']) && $settings['stretch'] == 2) || ($printfile['width'] / $printfile['height'] > $ratio)) {
           $mockup_width = round($printfile['height'] * $ratio);
           $mockup_height = $printfile['height'];
         }
@@ -955,34 +934,34 @@ function commerce_printful_generate_mockups($product_id, $api_key, $base_url = N
           $mockup_height = round($printfile['width'] / $ratio);
           $mockup_width = $printfile['width'];
         }
-
-        $parameters->format = $parameters::FORMAT_PNG;
-        $parameters->productId = $printful_product_id;
-        $parameters->variantIds = array($printful_variant_id);
-
-        $scaled_width = round($mockup_width - ($mockup_width * $scale));
-        $scaled_height = round($mockup_height - ($mockup_height * $scale));
-
-        $width_difference = $printfile['width'] - $scaled_width;
-        $height_difference = $printfile['height'] - $scaled_height;
-
-        $center_vertically = isset($file['settings']['center_vertically']) ? ($file['settings']['center_vertically'] * .01) : 0;
-        $center_horizontally = isset($file['settings']['center_horizontally']) ? ($file['settings']['center_horizontally'] * .01) : 0;
-
-        $left_offset = isset($file['settings']['left_offset']) ? $file['settings']['left_offset'] : 0;
-        $top_offset = isset($file['settings']['top_offset']) ? $file['settings']['top_offset'] : 0;
-
-        $position = new MockupPositionItem();
-        $position->areaWidth = $printfile['width'];
-        $position->areaHeight = $printfile['height'];
-        $position->width = $scaled_width;
-        $position->height = $scaled_height;
-
-        $position->top = !empty($center_vertically) ? ($height_difference / 2) : $top_offset;
-        $position->left = !empty($center_horizontally) ? ($width_difference / 2) : $left_offset;
-
-        $parameters->addImageUrl($file['settings']['placement'], $file['image_url'], $position);
       }
+
+      $parameters->format = $parameters::FORMAT_PNG;
+      $parameters->productId = $printful_product_id;
+      $parameters->variantIds = array($printful_variant_id);
+
+      $scaled_width = round($mockup_width - ($mockup_width * $scale));
+      $scaled_height = round($mockup_height - ($mockup_height * $scale));
+
+      $width_difference = $printfile['width'] - $scaled_width;
+      $height_difference = $printfile['height'] - $scaled_height;
+
+      $center_vertically = isset($settings['center_vertically']) ? ($settings['center_vertically'] * .01) : 0;
+      $center_horizontally = isset($settings['center_horizontally']) ? ($settings['center_horizontally'] * .01) : 0;
+
+      $left_offset = isset($settings['left_offset']) ? $settings['left_offset'] : 0;
+      $top_offset = isset($settings['top_offset']) ? $settings['top_offset'] : 0;
+
+      $position = new MockupPositionItem();
+      $position->areaWidth = $printfile['width'];
+      $position->areaHeight = $printfile['height'];
+      $position->width = $scaled_width;
+      $position->height = $scaled_height;
+
+      $position->top = !empty($center_vertically) ? ($height_difference / 2) : $top_offset;
+      $position->left = !empty($center_horizontally) ? ($width_difference / 2) : $left_offset;
+
+      $parameters->addImageUrl($settings['placement'], $image_url, $position);
     }
   }
 
@@ -1129,6 +1108,14 @@ function commerce_printful_print_file_settings_form($form, $form_state) {
     '#default_value' => isset($settings['scale_percentage']) ? $settings['scale_percentage'] : 0,
   );
 
+  $form['stretch'] = array(
+    '#title' => t('Stretch'),
+    '#type' => 'select',
+    '#description' => t('Stretch the print file to match the print area (cropping may occur).'),
+    '#options' => array(0 => t('None'), 1 => t('Horizontally'), 2 => t('Vertically')),
+    '#default_value' => isset($settings['stretch']) ? $settings['stretch'] : 0,
+  );
+
   $form['center_vertically'] = array(
     '#type' => 'checkbox',
     '#title' => t('Center vertically'),
@@ -1181,6 +1168,12 @@ function commerce_printful_print_file_settings_form_submit($form, $form_state) {
   $product_id = $form_state['build_info']['args'][0];
   $delta = $form_state['build_info']['args'][1];
 
+  $product = commerce_product_load($product_id);
+  $wrapper = entity_metadata_wrapper('commerce_product', $product);
+
+  $printful_product_id = $wrapper->field_printful_product_id->value();
+  $printful_variant_id = $wrapper->field_printful_variant_id->value();
+
   $values = array(
     'placement',
     'scale_percentage',
@@ -1188,6 +1181,7 @@ function commerce_printful_print_file_settings_form_submit($form, $form_state) {
     'center_horizontally',
     'left_offset',
     'top_offset',
+    'stretch',
   );
 
   $form_settings = array();
@@ -1196,6 +1190,19 @@ function commerce_printful_print_file_settings_form_submit($form, $form_state) {
   }
 
   $db_settings = commerce_printful_get_print_file_settings($product_id, $delta);
+
+  // Determine the printfile ID to use.
+  $placements = array();
+  foreach ($db_settings['variant_printfiles'] as $variant_printfile) {
+    if ($variant_printfile['variant_id'] == $printful_variant_id) {
+      foreach ($variant_printfile['placements'] as $key => $printfile_id) {
+        if ($key == $form_settings['placement']) {
+          $db_settings['printfile_id'] = $printfile_id;
+        }
+      }
+      break;
+    }
+  }
 
   $settings = array_merge($db_settings, $form_settings);
 
@@ -1237,19 +1244,13 @@ function commerce_printful_get_print_file_settings($product_id, $delta) {
   // Get the printfiles for the product.
   $response = commerce_printful_printfiles($printful_product_id, $api_key);
 
-  if (!empty($response['printfiles'][$delta])) {
-    $settings = array(
-      'printfile_id' => $response['printfiles'][$delta]['printfile_id'],
-      'available_placements' => $response['available_placements'],
-    );
-    db_insert('commerce_printful_print_file_settings')
-      ->fields(array(
-        'product_id' => $product_id,
-        'delta' => $delta,
-        'print_file_settings' => serialize($settings),
-      ))
-      ->execute();
-  }
+  db_insert('commerce_printful_print_file_settings')
+    ->fields(array(
+      'product_id' => $product_id,
+      'delta' => $delta,
+      'print_file_settings' => serialize($response),
+    ))
+    ->execute();
 
   return $settings;
 }
