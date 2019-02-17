@@ -8,4 +8,4 @@ dependencies:
   - commerce:commerce_price
   - commerce:commerce_order
   - commerce:commerce_tax
-  - commerce:commerce_shipping
+  - commerce_shipping:commerce_shipping
