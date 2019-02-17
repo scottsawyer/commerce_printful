@@ -9,6 +9,7 @@ use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\Product;
 use Drupal\commerce_product\Entity\ProductAttributeValue;
 use Drupal\commerce_product\Entity\ProductVariation;
+use Drupal\media\Entity\Media;
 use Printful\Exceptions\PrintfulApiException;
 use Printful\Exceptions\PrintfulException;
 use Printful\PrintfulApiClient;
@@ -69,6 +70,7 @@ function drush_commerce_printful_printful_sync_products() {
       // Check for an existing commerce_product with this sync product ID.
       $properties = ['field_product_id' => $sync_product['id']];
       $products = \Drupal::entityManager()->getStorage('commerce_product')->loadByProperties($properties);
+      $default_store = \Drupal::entityManager()->getStorage('commerce_store')->loadDefault();
       $product = [];
 
       if (empty($products)) {
@@ -78,6 +80,7 @@ function drush_commerce_printful_printful_sync_products() {
           'type' => 'printful',
           'title' => $sync_product['name'],
           'field_product_id' => $sync_product['id'],
+          'stores' => $default_store,
         ]);
         $product->save();
       }
@@ -94,7 +97,7 @@ function drush_commerce_printful_printful_sync_products() {
       // Loop over each variant and check for a commerce product variation.
       foreach ($variants['sync_variants'] as $variant) {
 
-        // drush_print(print_r($variant, TRUE));
+        // drush_print_r($variant);
 
         $sku = $variant['product']['product_id'] . '-' . $variant['product']['variant_id'];
         drush_print('Checking for SKU: ' . $sku);
@@ -109,7 +112,7 @@ function drush_commerce_printful_printful_sync_products() {
 
           // Get variant attributes.
           $variant_info = $pf->get('products/variant/' . $variant['variant_id']);
-          // drush_print(print_r($variant_info, TRUE));
+          // drush_print_r($variant_info);
 
           $variant_attrs = [
             'size' => $variant_info['variant']['size'],
@@ -142,14 +145,70 @@ function drush_commerce_printful_printful_sync_products() {
             }
           }
 
+          $media = [];
+          if (!empty($variant['files'][1])) {
+            $media_name = $sync_product['name'] . ' - ' . $variant_attrs['color'];
+            $properties = [
+              'name' => $media_name,
+            ];
+            $media_entities = \Drupal::entityManager()->getStorage('media')->loadByProperties($properties);
+            if ($media_entities) {
+              $media = reset($media_entities);
+            }
+            else {
+              drush_print('Creating media entity for mockup image');
+              $url = $variant['files'][1]['preview_url'];
+              $file_contents = file_get_contents($url);
+              $file = [];
+              if ($file_contents) {
+                $file = file_save_data($file_contents, 'public://images/' . basename($url), FILE_EXISTS_REPLACE);
+                $file->status = FILE_STATUS_PERMANENT;
+                $file->save();
+              }
+
+              if (!empty($file)) {
+                // Create a new media entity.
+                $media = [
+                  'name' => $media_name,
+                  'bundle' => 'image',
+                  'uid' => 1,
+                  'langcode' => \Drupal::languageManager()->getDefaultLanguage()->getId(),
+                  'field_image' => [
+                    'target_id' => $file->id(),
+                    'alt' => $media_name,
+                  ],
+                ];
+
+                $media = Media::create($media);
+                $media->save();
+              }
+            }
+
+          }
+
+          if (!empty($media)) {
+            $variation_properties['field_images'] = [$media];
+          }
+
           $variation_properties += [
             'type' => 'printful',
             'sku' => $sku,
             'title' => $variant['name'],
             'price' => new Price($variant['retail_price'], $variant['currency']),
+            'commerce_stock_always_in_stock' => TRUE,
+            'dimensions' => [
+              'length' => '6',
+              'width' => '4',
+              'height' => '1',
+              'unit' => 'in',
+            ],
+            'weight' => [
+              'number' => '13',
+              'unit' => 'oz',
+            ],
           ];
 
-          // drush_print(print_r($variation_properties, TRUE));
+          // drush_print_r($variation_properties);
 
           $variation = ProductVariation::create($variation_properties);
           $variation->save();
