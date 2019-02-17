@@ -12,6 +12,6 @@ commerce_printful.printful_config:
     _form: '\Drupal\commerce_printful\Form\PrintfulConfigForm'
     _title: 'Configure Commerce Printful'
   requirements:
-    _permission: 'access administration pages'
+    _permission: 'administer commerce printful'
   options:
     _admin_route: TRUE
