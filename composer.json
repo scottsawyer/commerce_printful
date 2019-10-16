@@ -10,7 +10,4 @@
     "issues": "http://drupal.org/project/issues/commerce_printful",
     "source": "http://cgit.drupalcode.org/commerce_printful"
   },
-  "require": {
-    "printful/php-api-sdk": "dev-master"
-  }
 }
