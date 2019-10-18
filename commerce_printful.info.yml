@@ -6,6 +6,7 @@ package: 'Commerce (contrib)'
 dependencies:
   - commerce:commerce
   - commerce:commerce_price
+  - commerce:commerce_product
   - commerce:commerce_order
   - commerce:commerce_tax
   - commerce_shipping:commerce_shipping

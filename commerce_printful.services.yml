@@ -1,0 +1,4 @@
+services:
+  commerce_printful.printful:
+    class: Drupal\commerce_printful\Service\Printful
+    arguments: ['@http_client', '@config.factory']
