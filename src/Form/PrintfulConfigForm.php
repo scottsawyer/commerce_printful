@@ -5,6 +5,8 @@ namespace Drupal\commerce_printful\Form;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
+use Drupal\Core\Entity\EntityFieldManagerInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\commerce_printful\Service\PrintfulInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -16,6 +18,20 @@ use Drupal\commerce_printful\Exception\PrintfulException;
  * The Printful configuration form.
  */
 class PrintfulConfigForm extends ConfigFormBase {
+
+  /**
+   * The Entity Field Manager.
+   *
+   * @var \Drupal\Core\Entity\EntityFieldManagerInterface
+   */
+  protected $entityFieldManager;
+
+  /**
+   * Commerce stores array.
+   *
+   * @var array
+   */
+  protected $stores;
 
   /**
    * A Printful integration service.
@@ -32,11 +48,24 @@ class PrintfulConfigForm extends ConfigFormBase {
   protected $variationBundles;
 
   /**
-   * {@inheritdoc}
+   * Creates a new PrintfulConfigForm instance.
+   *
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
+   *   The factory for configuration objects.
+   * @param \Drupal\Core\Entity\EntityTypeBundleInfoInterface $bundleInfo
+   *   The bundle info service.
+   * @param \Drupal\Core\Entity\EntityFieldManagerInterface $entityFieldManager
+   *   The entity field manager.
+   * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entityTypeManager
+   *   The entity type manager.
+   * @param \Drupal\commerce_printful\Service\PrintfulInterface $printful
+   *   The Printful API service.
    */
   public function __construct(
     ConfigFactoryInterface $config_factory,
-    EntityTypeBundleInfoInterface $entity_type_bundle_info,
+    EntityTypeBundleInfoInterface $bundleInfo,
+    EntityFieldManagerInterface $entityFieldManager,
+    EntityTypeManagerInterface $entityTypeManager,
     PrintfulInterface $printful
   ) {
     parent::__construct($config_factory);
@@ -47,8 +76,15 @@ class PrintfulConfigForm extends ConfigFormBase {
 
     $this->variationBundles = [];
 
-    foreach ($entity_type_bundle_info->getBundleInfo('commerce_product_variation') as $bundle_id => $bundle_info) {
+    foreach ($bundleInfo->getBundleInfo('commerce_product_variation') as $bundle_id => $bundle_info) {
       $this->variationBundles[$bundle_id] = $bundle_info['label'];
+    }
+
+    $this->entityFieldManager = $entityFieldManager;
+    $stores = $entityTypeManager->getStorage('commerce_store')->loadMultiple();
+    $this->stores = [];
+    foreach ($stores as $store_id => $store) {
+      $this->stores[$store_id] = $store->label();
     }
 
     $this->printful = $printful;
@@ -61,6 +97,8 @@ class PrintfulConfigForm extends ConfigFormBase {
     return new static(
       $container->get('config.factory'),
       $container->get('entity_type.bundle.info'),
+      $container->get('entity_field.manager'),
+      $container->get('entity_type.manager'),
       $container->get('commerce_printful.printful')
     );
   }
@@ -114,7 +152,7 @@ class PrintfulConfigForm extends ConfigFormBase {
 
     $form['connection']['api_key'] = [
       '#type' => 'textfield',
-      '#title' => $this->t('API key'),
+      '#title' => $this->t('Default API key'),
       '#default_value' => $config->get('api_key'),
     ];
 
@@ -123,12 +161,85 @@ class PrintfulConfigForm extends ConfigFormBase {
       '#type' => 'fieldset',
       '#title' => $this->t('Synchronization settings'),
     ];
-    $form['sync_settings']['variation_bundles'] = [
-      '#type' => 'checkboxes',
-      '#title' => $this->t('Product variation bundles'),
-      '#options' => $this->variationBundles,
-      '#default_value' => $config->get('variation_bundles'),
+
+    $form['sync_settings']['variation_sync_data'] = [
+      '#type' => 'fieldset',
+      '#title' => $this->t('Product variation settings'),
+      '#tree' => TRUE,
     ];
+
+    // Product variations sync data.
+    $variation_sync_data = $config->get('variation_sync_data');
+    if (empty($variation_sync_data)) {
+      $variation_sync_data = [];
+    }
+    foreach ($this->variationBundles as $bundle_id => $label) {
+      $form['sync_settings']['variation_sync_data'][$bundle_id]['state'] = [
+        '#type' => 'checkbox',
+        '#title' => $label,
+        '#default_value' => isset($variation_sync_data[$bundle_id]),
+      ];
+
+      // Attributes mapping setting.
+      $bundle_fields = $this->entityFieldManager->getFieldDefinitions('commerce_product_variation', $bundle_id);
+      $attribute_field_options = ['' => $this->t('-- Select attribute --')];
+      foreach ($bundle_fields as $field_id => $bundle_field) {
+        if (substr($field_id, 0, 10) === 'attribute_') {
+          $attribute_field_options[$field_id] = $bundle_field->getLabel();
+        }
+      }
+
+      $form['sync_settings']['variation_sync_data'][$bundle_id]['sync_data'] = [
+        '#type' => 'fieldset',
+        '#title' => $this->t('@variation sync data settings', [
+          '@variation' => $label,
+        ]),
+        '#states' => [
+          'visible' => [sprintf('[name="variation_sync_data[%s][state]"]', $bundle_id) => ['checked' => TRUE]],
+        ],
+      ];
+
+      $element = &$form['sync_settings']['variation_sync_data'][$bundle_id]['sync_data'];
+
+      // API key override.
+      $element['api_key'] = [
+        '#type' => 'textfield',
+        '#title' => $this->t('API key'),
+        '#description' => $this->t('If you wish to use a different Printful store for this product variation, please enter its API key here, otherwise the default will be used.'),
+        '#default_value' => isset($variation_sync_data[$bundle_id]['api_key']) ? $variation_sync_data[$bundle_id]['api_key'] : '',
+      ];
+
+      // Commerce store.
+      $element['commerce_store_id'] = [
+        '#type' => 'select',
+        '#title' => $this->t('Commerce store'),
+        '#options' => $this->stores,
+        '#default_value' => isset($variation_sync_data[$bundle_id]['commerce_store_id']) ? $variation_sync_data[$bundle_id]['commerce_store_id'] : NULL,
+      ];
+
+      if (count($attribute_field_options) > 1) {
+        foreach ([
+          'color' => $this->t('Color field'),
+          'size' => $this->t('Size field'),
+        ] as $attribute => $label) {
+          $element['attribute_mapping'][$attribute] = [
+            '#type' => 'select',
+            '#title' => $label,
+            '#options' => $attribute_field_options,
+          ];
+
+          // Figure out the default value.
+          if (isset($variation_sync_data[$bundle_id]['attribute_mapping'][$attribute])) {
+            $element['attribute_mapping'][$attribute]['#default_value'] = $variation_sync_data[$bundle_id]['attribute_mapping'][$attribute];
+          }
+          // Check the most intuitive option.
+          elseif (isset($attribute_field_options['attribute_' . $attribute])) {
+            $element['attribute_mapping'][$attribute]['#default_value'] = 'attribute_' . $attribute;
+          }
+        }
+      }
+
+    }
 
     return parent::buildForm($form, $form_state);
   }
@@ -179,11 +290,14 @@ class PrintfulConfigForm extends ConfigFormBase {
     $config->set('api_base_url', $values['api_base_url']);
     $config->set('api_key', $values['api_key']);
 
-    // Update variation bundles field instances if needed.
+    // Save product variation sync data and update variation bundles
+    // field instances if needed.
+    $variation_sync_data = [];
     $field_storage = FieldStorageConfig::loadByName('commerce_product_variation', 'printful_reference');
-    foreach ($values['variation_bundles'] as $bundle_id => $value) {
+    foreach ($values['variation_sync_data'] as $bundle_id => $data) {
+      $sync_data = $data['sync_data'];
       $field = FieldConfig::loadByName('commerce_product_variation', $bundle_id, 'printful_reference');
-      if ($value && empty($field)) {
+      if ($data['state'] && empty($field)) {
         // We need to add a field instance.
         $field = FieldConfig::create([
           'field_storage' => $field_storage,
@@ -193,14 +307,18 @@ class PrintfulConfigForm extends ConfigFormBase {
         ]);
         $field->save();
       }
-      // We have a field instance that needs to be deleted.
-      elseif (!$value && !empty($field)) {
+      elseif (!$data['state'] && !empty($field)) {
+        // We have a field instance that needs to be deleted.
         $field->delete();
+      }
+
+      if ($data['state']) {
+        $variation_sync_data[$bundle_id] = $sync_data;
       }
     }
 
     // Save variation bundles.
-    $config->set('variation_bundles', $values['variation_bundles']);
+    $config->set('variation_sync_data', $variation_sync_data);
 
     $config->save();
 
