@@ -10,6 +10,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\field\Entity\FieldConfig;
+use Drupal\commerce_printful\Exception\PrintfulException;
 
 /**
  * The Printful configuration form.
@@ -151,15 +152,15 @@ class PrintfulConfigForm extends ConfigFormBase {
         'api_base_url' => $api_base_url,
         'api_key' => $api_key,
       ]);
-      $result = $this->printful->getStoreInfo();
-      if ($result['status'] === 'error') {
-        $form_state->setError($form['connection'], $this->t('Invalid connection data. Error: @error', [
-          '@error' => $result['message'],
+      try {
+        $result = $this->printful->getStoreInfo();
+        $this->messenger()->addStatus($this->t('Successfully conected to the "@store" Printful store.', [
+          '@store' => $result['name'],
         ]));
       }
-      else {
-        $this->messenger()->addStatus($this->t('Successfully conected to the "@store" Printful store.', [
-          '@store' => $result['result']['name'],
+      catch (PrintfulException $e) {
+        $form_state->setError($form['connection'], $this->t('Invalid connection data. Error: @error', [
+          '@error' => $e->getMessage(),
         ]));
       }
     }

@@ -10,17 +10,20 @@ use GuzzleHttp\Exception\ClientException;
 /**
  * Defines the Printful service class.
  */
-class Printful implements PrintfulInterface{
+class Printful implements PrintfulInterface {
 
   const METHODS = [
     'syncProducts' => [
       'path' => 'sync/products',
     ],
     'syncVariant' => [
-      
+      'path' => 'sync/variant',
     ],
     'getStoreInfo' => [
       'path' => 'store',
+    ],
+    'productsVariant' => [
+      'path' => 'products/variant',
     ],
   ];
 
@@ -78,48 +81,63 @@ class Printful implements PrintfulInterface{
   /**
    * Perform an API request.
    */
-  protected function request($method, array $data = []) {
-    if (!array_key_exists($method, self::METHODS)) {
-      throw new PrintfulException('Unsupported method');
-    }
-    $data = self::METHODS[$method];
-    $data += [
-      'method' => 'GET'
-    ];
-    $uri = $this->baseUrl . $data['path'];
-
+  protected function request($request_options) {
     $options = [
       'headers' => [
         'Authorization' => 'Basic ' . base64_encode($this->apiKey),
       ],
     ];
 
-    $output = [
-      'status' => 'error',
-    ];
+    $uri = $this->baseUrl . $request_options['path'];
+
+    // TODO: Add more error handling here with time and tests.
     try {
-      $response = $this->client->request($data['method'], $uri, $options);
+      $response = $this->client->request($request_options['method'], $uri, $options);
 
       if ($response->getStatusCode() === 200) {
         $output = json_decode($response->getBody()->getContents(), TRUE);
-        $output['status'] = 'success';
       }
+      return $output['result'];
     }
     catch (ClientException $e) {
-      // TODO: Add more error handling here with time and tests.
       $output = json_decode($e->getResponse()->getBody()->getContents(), TRUE);
-      $output['message'] = isset($output['error']['message']) ? $output['error']['message'] : 'Unknown error';
-      $output['status'] = 'error';
+      $message = isset($output['error']['message']) ? $output['error']['message'] : 'Unknown error';
+      throw new PrintfulException($message);
     }
 
-    return $output;
   }
 
   /**
    * {@inheritdoc}
    */
-  public function getStoreInfo() {
-    return $this->request('getStoreInfo');
+  public function __call($method, $parameters) {
+    if (!array_key_exists($method, self::METHODS)) {
+      throw new PrintfulException('Unsupported method');
+    }
+    $request_options = self::METHODS[$method];
+    $request_options['method'] = 'GET';
+
+    if (!empty($parameters)) {
+      $parameters = $parameters[0];
+      if (!is_array($parameters)) {
+        if (!empty($parameters)) {
+          $request_options['path'] .= '/' . $parameters;
+        }
+      }
+      else {
+        if (isset($parameters['method'])) {
+          $request_options['method'] = $parameters['method'];
+          unset($parameters['method']);
+        }
+        else {
+          $request_options['method'] = 'POST';
+        }
+        $request_options['method'] = 'POST';
+        $request_options['data'] = $parameters;
+      }
+    }
+
+    return $this->request($request_options);
   }
 
 }

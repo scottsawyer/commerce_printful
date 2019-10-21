@@ -10,9 +10,7 @@ use Drupal\commerce_product\Entity\Product;
 use Drupal\commerce_product\Entity\ProductAttributeValue;
 use Drupal\commerce_product\Entity\ProductVariation;
 use Drupal\media\Entity\Media;
-use Printful\Exceptions\PrintfulApiException;
-use Printful\Exceptions\PrintfulException;
-use Printful\PrintfulApiClient;
+use Drupal\commerce_printful\Exception\PrintfulException;
 
 /**
  * Implements hook_drush_command().
@@ -36,17 +34,13 @@ function commerce_printful_drush_command() {
  * Logic for the test command.
  */
 function drush_commerce_printful_printful_test() {
-  $pf = new PrintfulApiClient(drush_commerce_printful_get_key());
+  $pf = \Drupal::service('commerce_printful');
   try {
-    $store = $pf->get('store');
+    $store = $pf->getStoreInfo();
     drush_print_r($store);
-  }
-  catch (PrintfulApiException $e) {
-    dt('Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
   }
   catch (PrintfulException $e) {
     dt('Printful Exception: ' . $e->getMessage());
-    drush_print_r($pf->getLastResponseRaw());
   }
 }
 
@@ -54,11 +48,11 @@ function drush_commerce_printful_printful_test() {
  * Logic for the sync products command.
  */
 function drush_commerce_printful_printful_sync_products() {
-  $pf = new PrintfulApiClient(drush_commerce_printful_get_key());
+  $pf = \Drupal::service('commerce_printful');
   try {
 
     // Get all the sync products.
-    $sync_products = $pf->get('sync/products');
+    $sync_products = $pf->syncProducts();
     drush_print(count($sync_products) . ' sync product(s) found.');
 
     // Loop over each sync product.
@@ -90,7 +84,7 @@ function drush_commerce_printful_printful_sync_products() {
       }
 
       // Get all this sync product's variants.
-      $variants = $pf->get('sync/products/' . $sync_product['id']);
+      $variants = $pf->syncProducts($sync_product['id']);
 
       // drush_print(print_r($variants, TRUE));
 
@@ -111,7 +105,7 @@ function drush_commerce_printful_printful_sync_products() {
           $variation_properties = [];
 
           // Get variant attributes.
-          $variant_info = $pf->get('products/variant/' . $variant['variant_id']);
+          $variant_info = $pf->productsVariant($variant['variant_id']);
           // drush_print_r($variant_info);
 
           $variant_attrs = [
@@ -230,15 +224,4 @@ function drush_commerce_printful_printful_sync_products() {
     dt('Printful Exception: ' . $e->getMessage());
     drush_print_r($pf->getLastResponseRaw());
   }
-}
-
-/**
- * Helper function for key handling.
- */
-function drush_commerce_printful_get_key() {
-  $key = \Drupal::configFactory()->getEditable('commerce_printful.settings')->get('api_key');
-  if (empty($key)) {
-    drush_die('Printful API key missing. Please complete module configuration.');
-  }
-  return $key;
 }
