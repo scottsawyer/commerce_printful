@@ -14,7 +14,7 @@ use Drupal\Core\Field\FieldDefinitionInterface;
  *
  * @FieldType(
  *   id = "printful_reference",
- *   label = @Translation("Printful product reference"),
+ *   label = @Translation("Printful reference"),
  *   description = @Translation("This field stores the reference to Printful product, it's required if this product type needs to be integrated with Printful."),
  *   category = @Translation("Printful"),
  *   default_widget = "printful_reference_widget",

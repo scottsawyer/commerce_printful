@@ -3,24 +3,29 @@ commerce_printful.settings:
   mapping:
     api_base_url:
       type: string
-      label: 'API base URL'
+      label: 'Printful API base URL'
     api_key:
       type: string
-      label: 'API key'
-    variation_sync_data:
+      label: 'Printful API key'
+    product_sync_data:
       type: sequence
       label: 'Product variation bundles that will be synchronized with Printful'
       sequence:
         type: mapping
         mapping:
+          commerce_store_id:
+            type: string
+            label: 'Commerce store ID'
+          api_key:
+            type: string
+            label: 'Printful API key'
           attribute_mapping:
             type: mapping
+            label: 'Printful attributes mapping'
             mapping:
               color:
                 type: string
               size:
                 type: string
-          commerce_store_id:
-            type: string
-          api_key:
-            type: string
+              image:
+                type: string

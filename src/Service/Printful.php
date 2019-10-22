@@ -88,6 +88,10 @@ class Printful implements PrintfulInterface {
       ],
     ];
 
+    if (!empty($request_options['query'])) {
+      $options['query'] = $request_options['query'];
+    }
+
     $uri = $this->baseUrl . $request_options['path'];
 
     // TODO: Add more error handling here with time and tests.
@@ -97,7 +101,7 @@ class Printful implements PrintfulInterface {
       if ($response->getStatusCode() === 200) {
         $output = json_decode($response->getBody()->getContents(), TRUE);
       }
-      return $output['result'];
+      return $output;
     }
     catch (ClientException $e) {
       $output = json_decode($e->getResponse()->getBody()->getContents(), TRUE);
@@ -130,10 +134,9 @@ class Printful implements PrintfulInterface {
           unset($parameters['method']);
         }
         else {
-          $request_options['method'] = 'POST';
+          $request_options['method'] = 'GET';
         }
-        $request_options['method'] = 'POST';
-        $request_options['data'] = $parameters;
+        $request_options['query'] = $parameters;
       }
     }
 

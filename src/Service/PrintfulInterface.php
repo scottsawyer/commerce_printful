@@ -3,7 +3,7 @@
 namespace Drupal\commerce_printful\Service;
 
 /**
- * Defines a Printful integration service.
+ * Defines a Printful API communication service.
  */
 interface PrintfulInterface {
 

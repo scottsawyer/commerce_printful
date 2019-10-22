@@ -15,3 +15,13 @@ commerce_printful.printful_config:
     _permission: 'administer commerce printful'
   options:
     _admin_route: TRUE
+
+commerce_printful.synchronization:
+  path: '/admin/commerce/config/printful/synchronization'
+  defaults:
+    _form: '\Drupal\commerce_printful\Form\PrintfulSynchronizationForm'
+    _title: 'Synchronization'
+  requirements:
+    _permission: 'administer commerce printful'
+  options:
+    _admin_route: TRUE

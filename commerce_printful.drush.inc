@@ -34,10 +34,10 @@ function commerce_printful_drush_command() {
  * Logic for the test command.
  */
 function drush_commerce_printful_printful_test() {
-  $pf = \Drupal::service('commerce_printful');
+  $pf = \Drupal::service('commerce_printful.printful');
   try {
-    $store = $pf->getStoreInfo();
-    drush_print_r($store);
+    $store_data = $pf->getStoreInfo();
+    drush_print_r($store_data);
   }
   catch (PrintfulException $e) {
     dt('Printful Exception: ' . $e->getMessage());
@@ -48,23 +48,23 @@ function drush_commerce_printful_printful_test() {
  * Logic for the sync products command.
  */
 function drush_commerce_printful_printful_sync_products() {
-  $pf = \Drupal::service('commerce_printful');
+  $pf = \Drupal::service('commerce_printful.printful');
   try {
 
     // Get all the sync products.
     $sync_products = $pf->syncProducts();
-    drush_print(count($sync_products) . ' sync product(s) found.');
+    drush_print(count($sync_products['result']) . ' sync product(s) found.');
 
     // Loop over each sync product.
-    foreach ($sync_products as $sync_product) {
+    foreach ($sync_products['result'] as $sync_product) {
 
       // drush_print_r($sync_product);
       drush_print('Processing ' . $sync_product['id'] . ' (' . $sync_product['name'] . ')');
 
       // Check for an existing commerce_product with this sync product ID.
       $properties = ['field_product_id' => $sync_product['id']];
-      $products = \Drupal::entityManager()->getStorage('commerce_product')->loadByProperties($properties);
-      $default_store = \Drupal::entityManager()->getStorage('commerce_store')->loadDefault();
+      $products = \Drupal::entityTypeManager()->getStorage('commerce_product')->loadByProperties($properties);
+      $default_store = \Drupal::entityTypeManager()->getStorage('commerce_store')->loadDefault();
       $product = [];
 
       if (empty($products)) {
@@ -89,7 +89,7 @@ function drush_commerce_printful_printful_sync_products() {
       // drush_print(print_r($variants, TRUE));
 
       // Loop over each variant and check for a commerce product variation.
-      foreach ($variants['sync_variants'] as $variant) {
+      foreach ($variants['result']['sync_variants'] as $variant) {
 
         // drush_print_r($variant);
 
@@ -99,7 +99,7 @@ function drush_commerce_printful_printful_sync_products() {
           'product_id' => $product->id(),
           'sku' => $sku,
         ];
-        $product_variations = \Drupal::entityManager()->getStorage('commerce_product_variation')->loadByProperties($properties);
+        $product_variations = \Drupal::entityTypeManager()->getStorage('commerce_product_variation')->loadByProperties($properties);
         if (empty($product_variations)) {
           drush_print('Creating new commerce_product_variation entity.');
           $variation_properties = [];
@@ -109,9 +109,9 @@ function drush_commerce_printful_printful_sync_products() {
           // drush_print_r($variant_info);
 
           $variant_attrs = [
-            'size' => $variant_info['variant']['size'],
-            'color' => $variant_info['variant']['color'],
-            'color_code' => $variant_info['variant']['color_code'],
+            'size' => $variant_info['result']['variant']['size'],
+            'color' => $variant_info['result']['variant']['color'],
+            'color_code' => $variant_info['result']['variant']['color_code'],
           ];
 
           foreach (['size', 'color'] as $attr_name) {
@@ -120,7 +120,7 @@ function drush_commerce_printful_printful_sync_products() {
               'attribute' => $attr_name,
               'name' => $variant_attrs[$attr_name],
             ];
-            $attrs = \Drupal::entityManager()->getStorage('commerce_product_attribute_value')->loadByProperties($properties);
+            $attrs = \Drupal::entityTypeManager()->getStorage('commerce_product_attribute_value')->loadByProperties($properties);
             if ($attrs) {
               $variation_properties['attribute_' . $attr_name] = reset($attrs);
             }
@@ -145,7 +145,7 @@ function drush_commerce_printful_printful_sync_products() {
             $properties = [
               'name' => $media_name,
             ];
-            $media_entities = \Drupal::entityManager()->getStorage('media')->loadByProperties($properties);
+            $media_entities = \Drupal::entityTypeManager()->getStorage('media')->loadByProperties($properties);
             if ($media_entities) {
               $media = reset($media_entities);
             }
@@ -217,11 +217,10 @@ function drush_commerce_printful_printful_sync_products() {
     }
 
   }
-  catch (PrintfulApiException $e) {
-    dt('Printful API Exception: ' . $e->getCode() . ' ' . $e->getMessage());
+  catch (PrintfulException $e) {
+    dt('Printful Exception: ' . $e->getMessage());
   }
   catch (PrintfulException $e) {
     dt('Printful Exception: ' . $e->getMessage());
-    drush_print_r($pf->getLastResponseRaw());
   }
 }

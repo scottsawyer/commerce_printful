@@ -1,3 +1,3 @@
 api_base_url: 'https://api.printful.com/'
 api_key: ''
-variation_bundles: []
+variation_sync_data: []

@@ -9,4 +9,11 @@ commerce_printful.printful_config:
   description: 'Configure Commerce Printful settings.'
   parent: 'commerce_printful.configuration'
   route_name: commerce_printful.printful_config
+  weight: 9
+
+commerce_printful.synchronization:
+  title: 'Synchronization'
+  description: 'Synchronize Commerce product variants with Printful store.'
+  parent: 'commerce_printful.configuration'
+  route_name: commerce_printful.synchronization
   weight: 10

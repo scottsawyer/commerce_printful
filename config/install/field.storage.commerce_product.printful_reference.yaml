@@ -1,0 +1,18 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - commerce_product
+    - commerce_printful
+id: commerce_product.printful_reference
+field_name: printful_reference
+entity_type: commerce_product
+type: printful_reference
+settings: {  }
+module: commerce_printful
+locked: true
+cardinality: 1
+translatable: false
+indexes: {  }
+persist_with_no_fields: true
+custom_storage: false
