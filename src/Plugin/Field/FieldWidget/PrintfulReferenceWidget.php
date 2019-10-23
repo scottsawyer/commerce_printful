@@ -23,9 +23,9 @@ class PrintfulReferenceWidget extends WidgetBase {
    * {@inheritdoc}
    */
   public function formElement(FieldItemListInterface $items, $delta, array $element, array &$form, FormStateInterface $form_state) {
-    $element['variant_id'] = $element + [
+    $element['printful_id'] = $element + [
       '#type' => 'number',
-      '#default_value' => isset($items[$delta]->variant_id) ? $items[$delta]->variant_id : NULL,
+      '#default_value' => isset($items[$delta]->printful_id) ? $items[$delta]->printful_id : NULL,
       '#min' => 0,
       '#step' => 1,
     ];

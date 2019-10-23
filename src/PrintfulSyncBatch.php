@@ -37,7 +37,7 @@ class PrintfulSyncBatch {
    *   Batch context.
    */
   public static function doSync($product_bundle, array &$context) {
-    $pf = \Drupal::service('commerce_printful.printful');
+    $integrator = \Drupal::service('commerce_printful.integrator');
 
     // Get config.
     if (!isset($context['sandbox']['sync_data'])) {
@@ -51,7 +51,7 @@ class PrintfulSyncBatch {
 
     // Set service API key if overridden.
     if (!empty($sync_data['api_key'])) {
-      $pf->setConnectionInfo(['api_key' => $sync_data['api_key']]);
+      $integrator->setConnectionInfo(['api_key' => $sync_data['api_key']]);
     }
 
     // Initialize batch.
@@ -62,7 +62,7 @@ class PrintfulSyncBatch {
     try {
       // We sync one product at a time, since there are most probably many
       // size / color variants resulting in many operations per batch anyway.
-      $result = $pf->syncProducts(['offset' => $context['sandbox']['offset'], 'limit' => 1]);
+      $result = $integrator->getSyncProducts($context['sandbox']['offset'], 1);
     }
     catch (PrintfulException $e) {
       static::message(static::t('Printful API connection error: @error', [
@@ -76,51 +76,18 @@ class PrintfulSyncBatch {
     }
 
     if (isset($result['result'][0])) {
-      $entityTypeManager = \Drupal::entityTypeManager();
+      $integrator->setConfiguration($sync_data);
 
-      $store = $entityTypeManager->getStorage('commerce_store')->load($sync_data['commerce_store_id']);
-      $printful_product = $result['result'][0];
-      $products = $entityTypeManager->getStorage('commerce_product')->loadByProperties(['printful_reference' => $printful_product['id']]);
-
-      if (empty($products)) {
-        // Create the new product.
-        $product = Product::create([
-          'type' => $product_bundle,
-          'title' => $printful_product['name'],
-          'printful_reference' => $printful_product['id'],
-          'stores' => $store,
-        ]);
-        $product->save();
-      }
-      else {
-        $product = reset($products);
-      }
-
-      // Get all this sync product's variants.
       try {
-        $result = $pf->syncProducts($printful_product['id']);
+        $data = $result['result'][0];
+        $data['_bundle'] = $product_bundle;
+        $product = $integrator->syncProduct();
+        $integrator->syncVariants($product);
       }
       catch (PrintfulException $e) {
         static::message(static::t('Printful API connection error: @error', [
           '@error' => $e->getMessage(),
         ]), 'error');
-        return;
-      }
-
-      foreach ($result['result']['sync_variants'] as $printful_variant) {
-        $variant_data = $pf->productsVariant($printful_variant['variant_id']);
-
-        $fields = [
-
-        ];
-
-        $product_variations = $entityTypeManager->getStorage('commerce_product_variation')->loadByProperties([
-          'printful_reference' => $printful_variant['id'],
-        ]);
-        if (empty($product_variations)) {
-
-        }
-
       }
 
     }

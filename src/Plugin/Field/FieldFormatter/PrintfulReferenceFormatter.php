@@ -27,7 +27,7 @@ class PrintfulReferenceFormatter extends FormatterBase {
     $elements = [];
 
     foreach ($items as $delta => $item) {
-      $elements[$delta] = ['#markup' => $item->variant_id];
+      $elements[$delta] = ['#markup' => $item->printful_id];
     }
 
     return $elements;

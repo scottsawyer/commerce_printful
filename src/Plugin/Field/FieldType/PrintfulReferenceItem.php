@@ -52,7 +52,7 @@ class PrintfulReferenceItem extends FieldItemBase {
   public static function schema(FieldStorageDefinitionInterface $field_definition) {
     return [
       'columns' => [
-        'variant_id' => [
+        'printful_id' => [
           'type' => 'int',
           'unsigned' => TRUE,
           'not null' => FALSE,
@@ -66,7 +66,7 @@ class PrintfulReferenceItem extends FieldItemBase {
    */
   public static function propertyDefinitions(FieldStorageDefinitionInterface $field_definition) {
 
-    $properties['variant_id'] = DataDefinition::create('integer')
+    $properties['printful_id'] = DataDefinition::create('integer')
       ->setLabel(new TranslatableMarkup('Employer entity ID'))
       ->setSetting('unsigned', TRUE);
 
@@ -81,7 +81,7 @@ class PrintfulReferenceItem extends FieldItemBase {
 
     $constraint_manager = \Drupal::typedDataManager()->getValidationConstraintManager();
     $constraints[] = $constraint_manager->create('ComplexData', [
-      'variant_id' => [
+      'printful_id' => [
         'Range' => [
           'min' => 0,
           'minMessage' => t('%name: The ID must be larger or equal to 0.', [
@@ -98,7 +98,7 @@ class PrintfulReferenceItem extends FieldItemBase {
    * {@inheritdoc}
    */
   public static function generateSampleValue(FieldDefinitionInterface $field_definition) {
-    $values['variant_id'] = mt_rand(0, 999999);
+    $values['printful_id'] = mt_rand(0, 999999);
     return $values;
   }
 
@@ -106,14 +106,14 @@ class PrintfulReferenceItem extends FieldItemBase {
    * {@inheritdoc}
    */
   public static function mainPropertyName() {
-    return 'variant_id';
+    return 'printful_id';
   }
 
   /**
    * {@inheritdoc}
    */
   public function isEmpty() {
-    return empty($this->variant_id);
+    return empty($this->printful_id);
   }
 
 }
