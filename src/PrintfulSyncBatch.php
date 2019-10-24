@@ -41,11 +41,12 @@ class PrintfulSyncBatch {
 
     // Get config.
     if (!isset($context['sandbox']['sync_data'])) {
-      if (!isset($config['product_sync_data'][$product_bundle])) {
+      $config = \Drupal::config('commerce_printful.settings')->get('product_sync_data');
+      if (!isset($config[$product_bundle])) {
         static::message(static::t('Invalid product bundle ID specified.'), 'error');
         return;
       }
-      $context['sandbox']['sync_data'] = $config['product_sync_data'][$product_bundle];
+      $context['sandbox']['sync_data'] = $config[$product_bundle];
     }
     $sync_data = &$context['sandbox']['sync_data'];
 
@@ -57,6 +58,7 @@ class PrintfulSyncBatch {
     // Initialize batch.
     if (!isset($context['sandbox']['offset'])) {
       $context['sandbox']['offset'] = 0;
+      $context['results']['count'] = 0;
     }
 
     try {
@@ -81,17 +83,47 @@ class PrintfulSyncBatch {
       try {
         $data = $result['result'][0];
         $data['_bundle'] = $product_bundle;
-        $product = $integrator->syncProduct();
-        $integrator->syncVariants($product);
+        $product = $integrator->syncProduct($data);
+        $integrator->syncProductVariants($product);
+
+        $context['sandbox']['offset']++;
+        $context['finished'] = $context['sandbox']['offset'] / $context['sandbox']['total'];
+        $context['message'] = static::t('Synchronized @count of @total products.', [
+          '@count' => $context['sandbox']['processed'],
+          '@total' => $context['sandbox']['total'],
+        ]);
+        $context['results']['count']++;
       }
       catch (PrintfulException $e) {
-        static::message(static::t('Printful API connection error: @error', [
+        static::message(static::t('Printful error: @error', [
           '@error' => $e->getMessage(),
         ]), 'error');
       }
 
     }
 
+  }
+
+  /**
+   * Batch finished callback.
+   *
+   * @param bool $success
+   *   Was the process successfull?
+   * @param array $results
+   *   Batch processing results.
+   * @param array $operations
+   *   Performed operations array.
+   */
+  public static function batchFinished($success, array $results, array $operations) {
+    if ($success) {
+      $message = static::t('Synchronized @count products.', [
+        '@count' => $results['count'],
+      ]);
+    }
+    else {
+      $message = static::t('Finished with an error.');
+    }
+    static::message($message, 'error');
   }
 
   /**
@@ -105,11 +137,11 @@ class PrintfulSyncBatch {
 
     $batchBuilder = (new BatchBuilder())
       ->setTitle('Synchronizing product variants.')
-      ->setFinished([$current_class, 'batchFinished'])
+      ->setFinishCallback([$current_class, 'batchFinished'])
       ->setProgressMessage('Synchronizing, estimated time left: @estimate, elapsed: @elapsed.')
-      ->addOperation([$this, 'doSync'], [$variation_bundle]);
+      ->addOperation([$current_class, 'doSync'], [$product_bundle]);
 
-    return $batch_builder->toArray();
+    return $batchBuilder->toArray();
   }
 
 }
