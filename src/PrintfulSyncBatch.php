@@ -33,10 +33,12 @@ class PrintfulSyncBatch {
    *
    * @param string $product_bundle
    *   Product variation bundle to synchronize.
+   * @param bool $update
+   *   Should existing data be updated?
    * @param array $context
    *   Batch context.
    */
-  public static function doSync($product_bundle, array &$context) {
+  public static function doSync($product_bundle, $update, array &$context) {
     $integrator = \Drupal::service('commerce_printful.integrator');
 
     // Get config.
@@ -79,6 +81,7 @@ class PrintfulSyncBatch {
 
     if (isset($result['result'][0])) {
       $integrator->setConfiguration($sync_data);
+      $integrator->setUpdate($update);
 
       try {
         $data = $result['result'][0];
@@ -89,7 +92,7 @@ class PrintfulSyncBatch {
         $context['sandbox']['offset']++;
         $context['finished'] = $context['sandbox']['offset'] / $context['sandbox']['total'];
         $context['message'] = static::t('Synchronized @count of @total products.', [
-          '@count' => $context['sandbox']['processed'],
+          '@count' => $context['sandbox']['offset'],
           '@total' => $context['sandbox']['total'],
         ]);
         $context['results']['count']++;
@@ -119,27 +122,29 @@ class PrintfulSyncBatch {
       $message = static::t('Synchronized @count products.', [
         '@count' => $results['count'],
       ]);
+      $type = 'status';
     }
     else {
       $message = static::t('Finished with an error.');
+      $type = 'error';
     }
-    static::message($message, 'error');
+    static::message($message, $type);
   }
 
   /**
    * Batch builder function.
    *
-   * @param string $product_bundle
-   *   Product variation bundle to synchronize.
+   * @param array $options
+   *   Synchronization options passed to the batch operation.
    */
-  public static function getBatch($product_bundle) {
+  public static function getBatch(array $options) {
     $current_class = get_called_class();
 
     $batchBuilder = (new BatchBuilder())
       ->setTitle('Synchronizing product variants.')
       ->setFinishCallback([$current_class, 'batchFinished'])
       ->setProgressMessage('Synchronizing, estimated time left: @estimate, elapsed: @elapsed.')
-      ->addOperation([$current_class, 'doSync'], [$product_bundle]);
+      ->addOperation([$current_class, 'doSync'], $options);
 
     return $batchBuilder->toArray();
   }

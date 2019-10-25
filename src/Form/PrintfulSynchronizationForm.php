@@ -71,6 +71,13 @@ class PrintfulSynchronizationForm extends FormBase {
       '#required' => TRUE,
     ];
 
+    $form['update'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Update existing data'),
+      '#default_value' => FALSE,
+      '#description' => $this->t('If checked, existing products and variations will be updated, otherwise only new items will be imported.'),
+    ];
+
     $form['execute_sync'] = [
       '#type' => 'submit',
       '#value' => $this->t('Execute'),
@@ -83,7 +90,10 @@ class PrintfulSynchronizationForm extends FormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    batch_set(PrintfulSyncBatch::getBatch($form_state->getValue('product_bundle')));
+    batch_set(PrintfulSyncBatch::getBatch([
+      'product_bundle' => $form_state->getValue('product_bundle'),
+      'update' => $form_state->getValue('update'),
+    ]));
   }
 
 }

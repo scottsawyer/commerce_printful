@@ -5,4 +5,4 @@ services:
 
   commerce_printful.integrator:
     class: Drupal\commerce_printful\Service\PrintfulIntegrator
-    arguments: ['@commerce_printful.printful', '@entity_type.manager']
+    arguments: ['@commerce_printful.printful', '@entity_type.manager', '@file_system']

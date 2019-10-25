@@ -3,6 +3,7 @@
 namespace Drupal\commerce_printful\Service;
 
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\File\FileSystemInterface;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\commerce_printful\Exception\PrintfulException;
 use Drupal\commerce_price\Price;
@@ -28,6 +29,13 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
   protected $entityTypeManager;
 
   /**
+   * The file system service.
+   *
+   * @var \Drupal\Core\File\FileSystemInterface
+   */
+  protected $fileSystem;
+
+  /**
    * Commerce store entity.
    *
    * @var \Drupal\commerce_store\Entity\StoreInterface
@@ -42,19 +50,30 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
   protected $configuration;
 
   /**
+   * Should existing content be updated?
+   *
+   * @var bool
+   */
+  protected $update;
+
+  /**
    * Constructor.
    *
    * @param \Drupal\commerce_printful\Service\Printful $pf
    *   The printful API service.
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entityTypeManager
    *   The Entity Type Manager.
+   * @param \Drupal\Core\File\FileSystemInterface $fileSystem
+   *   The file system service.
    */
   public function __construct(
     Printful $pf,
-    EntityTypeManagerInterface $entityTypeManager
+    EntityTypeManagerInterface $entityTypeManager,
+    FileSystemInterface $fileSystem
   ) {
     $this->pf = $pf;
     $this->entityTypeManager = $entityTypeManager;
+    $this->fileSystem = $fileSystem;
   }
 
   /**
@@ -79,6 +98,13 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
     if (isset($configuration['commerce_store_id'])) {
       $this->setStore($configuration['commerce_store_id']);
     }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setUpdate($value) {
+    $this->update = $value;
   }
 
   /**
@@ -126,15 +152,28 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
       throw new PrintfulException(sprintf('Product %d is not synchronized with Printful.', $product->id()));
     }
 
+    $old_variations = [];
+    foreach ($product->getVariations() as $variation) {
+      $old_variations[$variation->id()] = $variation;
+    }
+
     // Get product data including variants.
     $result = $this->pf->syncProducts($printful_id);
 
     $variations = [];
     $variation_bundle = $this->entityTypeManager->getStorage('commerce_product_type')->load($product->bundle())->getVariationTypeId();
     foreach ($result['result']['sync_variants'] as $printful_variant) {
-      $variations[] = $this->syncProductVariant($printful_variant, $product, $variation_bundle);
+      $variation = $this->syncProductVariant($printful_variant, $product, $variation_bundle);
+      $variations[$variation->id()] = $variation;
     }
     $product->setVariations($variations);
+
+    // Delete obsolete, orphaned variations, if any.
+    foreach (array_keys($old_variations) as $old_variation_id) {
+      if (!isset($variations[$old_variation_id])) {
+        $old_variations[$old_variation_id]->delete();
+      }
+    }
 
     $product->save();
   }
@@ -150,6 +189,15 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
     $product_variations = $variationStorage->loadByProperties([
       'printful_reference' => $printful_variant['id'],
     ]);
+
+    $sku = 'PF-' . $printful_variant['product']['product_id'] . '-' . $printful_variant['product']['variant_id'];
+    if (empty($product_variations)) {
+      // Try to get by SKU.
+      $product_variations = $variationStorage->loadByProperties([
+        'sku' => $sku,
+      ]);
+    }
+
     if (empty($product_variations)) {
       $variation = $variationStorage->create([
         'type' => $variation_bundle,
@@ -157,12 +205,17 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
     }
     else {
       $variation = reset($product_variations);
+      if (!$this->update) {
+        return $variation;
+      }
     }
 
     $variation->product_id->target_id = $product->id();
-    $variation->sku->value = $printful_variant['product']['product_id'] . '-' . $printful_variant['product']['variant_id'];
+    $variation->sku->value = $sku;
     $variation->title->value = $printful_variant['name'];
     $variation->price->setValue(new Price($printful_variant['retail_price'], $printful_variant['currency']));
+    $variation->printful_reference->printful_id = $printful_variant['id'];
+
     if (isset($variation->commerce_stock_always_in_stock)) {
       $variation->commerce_stock_always_in_stock->setValue(TRUE);
     }
@@ -199,7 +252,7 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
    * @param string $field_name
    *   The name of the image field.
    */
-  protected function syncImage(ProductVariationInterface $variation, array $file_data, $field_name) {
+  public function syncImage(ProductVariationInterface $variation, array $file_data, $field_name) {
     $field_type = $variation->{$field_name}->getFieldDefinition()->getType();
     switch ($field_type) {
       case 'image':
@@ -210,15 +263,20 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
 
         $file_directory = $variation->{$field_name}->getFieldDefinition()->getSetting('file_directory');
         $uri_scheme = $variation->{$field_name}->getFieldDefinition()->getFieldStorageDefinition()->getSetting('uri_scheme');
-        $destination = $uri_scheme . '://' . $file_directory . '/' . $file_data['filename'];
+        $destination_dir = $uri_scheme . '://' . $file_directory;
+        if (!$this->fileSystem->prepareDirectory($destination_dir, FileSystemInterface::CREATE_DIRECTORY)) {
+          throw new PrintfulException(sprintf('Variant image target directory (%s) problem.', $destination_dir));
+        }
+
+        $destination = $destination_dir . '/' . $file_data['filename'];
+
         $file = file_save_data(file_get_contents($file_data['preview_url']), $destination, FILE_EXISTS_RENAME);
         if (!$file) {
           throw new PrintfulException('Variant image save problem.');
         }
+
         $file->save();
-        $items[] = [
-          'target_id' => $file->id(),
-        ];
+        $variation->{$field_name}->setValue([['target_id' => $file->id()]]);
 
         break;
 
@@ -262,6 +320,7 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
     }
     else {
       $attribute = $attributeValueStorage->create($properties);
+      $attribute->save();
     }
 
     $variation->{$field_name}[0] = [
