@@ -25,6 +25,10 @@ class Printful implements PrintfulInterface {
     'productsVariant' => [
       'path' => 'products/variant',
     ],
+    'shippingRates' => [
+      'path' => 'shipping/rates',
+      'method' => 'POST',
+    ],
   ];
 
   /**
@@ -91,6 +95,9 @@ class Printful implements PrintfulInterface {
     if (!empty($request_options['query'])) {
       $options['query'] = $request_options['query'];
     }
+    if (!empty($request_options['body'])) {
+      $options['body'] = json_encode($request_options['body']);
+    }
 
     $uri = $this->baseUrl . $request_options['path'];
 
@@ -119,7 +126,9 @@ class Printful implements PrintfulInterface {
       throw new PrintfulException('Unsupported method');
     }
     $request_options = self::METHODS[$method];
-    $request_options['method'] = 'GET';
+    $request_options += [
+      'method' => 'GET',
+    ];
 
     if (!empty($parameters)) {
       $parameters = $parameters[0];
@@ -133,10 +142,12 @@ class Printful implements PrintfulInterface {
           $request_options['method'] = $parameters['method'];
           unset($parameters['method']);
         }
-        else {
-          $request_options['method'] = 'GET';
+        if ($request_options['method'] === 'GET') {
+          $request_options['query'] = $parameters;
         }
-        $request_options['query'] = $parameters;
+        else {
+          $request_options['body'] = $parameters;
+        }
       }
     }
 

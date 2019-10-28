@@ -39,7 +39,7 @@ class PrintfulSyncBatch {
    *   Batch context.
    */
   public static function doSync($product_bundle, $update, array &$context) {
-    $integrator = \Drupal::service('commerce_printful.integrator');
+    $integrator = \Drupal::service('commerce_printful.product_integrator');
 
     // Get config.
     if (!isset($context['sandbox']['sync_data'])) {

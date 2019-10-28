@@ -3,6 +3,18 @@ services:
     class: Drupal\commerce_printful\Service\Printful
     arguments: ['@http_client', '@config.factory']
 
-  commerce_printful.integrator:
-    class: Drupal\commerce_printful\Service\PrintfulIntegrator
+  # Product integrator service.
+  commerce_printful.product_integrator:
+    class: Drupal\commerce_printful\Service\ProductIntegrator
     arguments: ['@commerce_printful.printful', '@entity_type.manager', '@file_system']
+
+  # Order integrator service.
+  commerce_printful.order_integrator:
+    class: Drupal\commerce_printful\Service\OrderIntegrator
+    arguments: ['@commerce_printful.printful']
+
+  commerce_printful.order_subscriber:
+    class: Drupal\commerce_printful\EventSubscriber\OrderEventSubscriber
+    arguments: ['@commerce_printful.order_integrator']
+    tags:
+      - { name: event_subscriber }

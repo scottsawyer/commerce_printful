@@ -10,14 +10,14 @@ use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\ProductVariationInterface;
 
 /**
- * Printful integration service implementation.
+ * Printful product integration service implementation.
  */
-class PrintfulIntegrator implements PirntfulIntegratorInterface {
+class ProductIntegrator implements ProductIntegratorInterface {
 
   /**
    * The printful API service.
    *
-   * @var \Drupal\commerce_printful\Service\Printful
+   * @var \Drupal\commerce_printful\Service\PrintfulInterface
    */
   protected $pf;
 
@@ -59,7 +59,7 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
   /**
    * Constructor.
    *
-   * @param \Drupal\commerce_printful\Service\Printful $pf
+   * @param \Drupal\commerce_printful\Service\PrintfulInterface $pf
    *   The printful API service.
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entityTypeManager
    *   The Entity Type Manager.
@@ -67,7 +67,7 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
    *   The file system service.
    */
   public function __construct(
-    Printful $pf,
+    PrintfulInterface $pf,
     EntityTypeManagerInterface $entityTypeManager,
     FileSystemInterface $fileSystem
   ) {
@@ -119,14 +119,14 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
    */
   public function syncProduct($data) {
     $productStorage = $this->entityTypeManager->getStorage('commerce_product');
-    $products = $productStorage->loadByProperties(['printful_reference' => $data['id']]);
+    $products = $productStorage->loadByProperties(['printful_reference' => $data['external_id']]);
 
     if (empty($products)) {
       // Create the new product.
       $product = $productStorage->create([
         'type' => $data['_bundle'],
         'title' => $data['name'],
-        'printful_reference' => $data['id'],
+        'printful_reference' => $data['external_id'],
         'stores' => $this->store,
       ]);
       $product->save();
@@ -146,7 +146,7 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
       $printful_id = $product->printful_reference->printful_id;
     }
     catch (\Exception $e) {
-      $printful_id = 0;
+      $printful_id = '';
     }
     if (empty($printful_id)) {
       throw new PrintfulException(sprintf('Product %d is not synchronized with Printful.', $product->id()));
@@ -158,7 +158,7 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
     }
 
     // Get product data including variants.
-    $result = $this->pf->syncProducts($printful_id);
+    $result = $this->pf->syncProducts('@' . $printful_id);
 
     $variations = [];
     $variation_bundle = $this->entityTypeManager->getStorage('commerce_product_type')->load($product->bundle())->getVariationTypeId();
@@ -187,7 +187,7 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
     $variant_parameters = $result['result']['variant'];
 
     $product_variations = $variationStorage->loadByProperties([
-      'printful_reference' => $printful_variant['id'],
+      'printful_reference' => $printful_variant['external_id'],
     ]);
 
     $sku = 'PF-' . $printful_variant['product']['product_id'] . '-' . $printful_variant['product']['variant_id'];
@@ -214,7 +214,7 @@ class PrintfulIntegrator implements PirntfulIntegratorInterface {
     $variation->sku->value = $sku;
     $variation->title->value = $printful_variant['name'];
     $variation->price->setValue(new Price($printful_variant['retail_price'], $printful_variant['currency']));
-    $variation->printful_reference->printful_id = $printful_variant['id'];
+    $variation->printful_reference->printful_id = $printful_variant['external_id'];
 
     if (isset($variation->commerce_stock_always_in_stock)) {
       $variation->commerce_stock_always_in_stock->setValue(TRUE);

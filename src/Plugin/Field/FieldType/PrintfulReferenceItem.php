@@ -52,9 +52,11 @@ class PrintfulReferenceItem extends FieldItemBase {
   public static function schema(FieldStorageDefinitionInterface $field_definition) {
     return [
       'columns' => [
+        // Those IDs seem to always be 12 - character long strings but until it's
+        // officially confirmed by the docs..
         'printful_id' => [
-          'type' => 'int',
-          'unsigned' => TRUE,
+          'type' => 'varchar',
+          'length' => 16,
           'not null' => FALSE,
         ],
       ],
@@ -66,9 +68,8 @@ class PrintfulReferenceItem extends FieldItemBase {
    */
   public static function propertyDefinitions(FieldStorageDefinitionInterface $field_definition) {
 
-    $properties['printful_id'] = DataDefinition::create('integer')
-      ->setLabel(new TranslatableMarkup('Employer entity ID'))
-      ->setSetting('unsigned', TRUE);
+    $properties['printful_id'] = DataDefinition::create('string')
+      ->setLabel(new TranslatableMarkup('External printful ID'));
 
     return $properties;
   }
@@ -76,29 +77,8 @@ class PrintfulReferenceItem extends FieldItemBase {
   /**
    * {@inheritdoc}
    */
-  public function getConstraints() {
-    $constraints = parent::getConstraints();
-
-    $constraint_manager = \Drupal::typedDataManager()->getValidationConstraintManager();
-    $constraints[] = $constraint_manager->create('ComplexData', [
-      'printful_id' => [
-        'Range' => [
-          'min' => 0,
-          'minMessage' => t('%name: The ID must be larger or equal to 0.', [
-            '%name' => $this->getFieldDefinition()->getLabel(),
-          ]),
-        ],
-      ],
-    ]);
-
-    return $constraints;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
   public static function generateSampleValue(FieldDefinitionInterface $field_definition) {
-    $values['printful_id'] = mt_rand(0, 999999);
+    $values['printful_id'] = substr(uniqid(), 0, 12);
     return $values;
   }
 
