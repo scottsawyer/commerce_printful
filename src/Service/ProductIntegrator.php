@@ -93,7 +93,7 @@ class ProductIntegrator implements ProductIntegratorInterface {
   /**
    * {@inheritdoc}
    */
-  public function setConfiguration($configuration) {
+  public function setConfiguration(array $configuration) {
     $this->configuration = $configuration;
     if (isset($configuration['commerce_store_id'])) {
       $this->setStore($configuration['commerce_store_id']);
@@ -117,7 +117,7 @@ class ProductIntegrator implements ProductIntegratorInterface {
   /**
    * {@inheritdoc}
    */
-  public function syncProduct($data) {
+  public function syncProduct(array $data) {
     $productStorage = $this->entityTypeManager->getStorage('commerce_product');
     $products = $productStorage->loadByProperties(['printful_reference' => $data['external_id']]);
 
@@ -252,7 +252,7 @@ class ProductIntegrator implements ProductIntegratorInterface {
    * @param string $field_name
    *   The name of the image field.
    */
-  public function syncImage(ProductVariationInterface $variation, array $file_data, $field_name) {
+  protected function syncImage(ProductVariationInterface $variation, array $file_data, $field_name) {
     $field_type = $variation->{$field_name}->getFieldDefinition()->getType();
     switch ($field_type) {
       case 'image':
