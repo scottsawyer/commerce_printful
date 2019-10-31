@@ -6,6 +6,7 @@ use Drupal\commerce_shipping\Plugin\Commerce\ShippingMethod\ShippingMethodBase;
 use Drupal\commerce_currency_resolver\Plugin\Commerce\CommerceCurrencyResolverAmountTrait;
 use Drupal\commerce_printful\Service\PrintfulInterface;
 use Psr\Log\LoggerInterface;
+use Drupal\Core\Config\ImmutableConfig;
 use Drupal\commerce_shipping\ShippingService;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\commerce_price\Price;
@@ -44,6 +45,13 @@ class PrintfulShipping extends ShippingMethodBase {
   protected $logger;
 
   /**
+   * Integration settings.
+   *
+   * @var array
+   */
+  protected $integrationSettings;
+
+  /**
    * Constructor.
    *
    * @param array $configuration
@@ -58,6 +66,8 @@ class PrintfulShipping extends ShippingMethodBase {
    *   The package type manager.
    * @param \Psr\Log\LoggerInterface $logger
    *   The logger factory service.
+   * @param \Drupal\Core\Config\ImmutableConfig $config
+   *   Config for this module.
    */
   public function __construct(
     array $configuration,
@@ -65,12 +75,14 @@ class PrintfulShipping extends ShippingMethodBase {
     $plugin_definition,
     PackageTypeManagerInterface $package_type_manager,
     PrintfulInterface $pf,
-    LoggerInterface $logger
+    LoggerInterface $logger,
+    ImmutableConfig $config
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition, $package_type_manager);
 
     $this->pf = $pf;
     $this->logger = $logger;
+    $this->integrationSettings = $config->get('product_sync_data');
   }
 
   /**
@@ -83,7 +95,8 @@ class PrintfulShipping extends ShippingMethodBase {
       $plugin_definition,
       $container->get('plugin.manager.commerce_package_type'),
       $container->get('commerce_printful.printful'),
-      $container->get('logger.factory')->get('commerce_printful')
+      $container->get('logger.factory')->get('commerce_printful'),
+      $container->get('config.factory')->get('commerce_printful.settings')
     );
   }
 
@@ -120,8 +133,21 @@ class PrintfulShipping extends ShippingMethodBase {
 
     $order = $shipment->getOrder();
     $printful_items = [];
+
+    // For now let's assume all the items in the cart are from the same Printful
+    // store. TODO: check how this works with multiple stores.
+    $api_key = '';
     foreach ($shipment->getOrder()->getItems() as $orderItem) {
       $purchasedEntity = $orderItem->getPurchasedEntity();
+
+      if (empty($api_key)) {
+        $product_bundle = $purchasedEntity->getProduct()->bundle();
+        if (!empty($this->integrationSettings[$product_bundle]['api_key'])) {
+          $api_key = $this->integrationSettings[$product_bundle]['api_key'];
+          $this->pf->setConnectionInfo(['api_key' => $api_key]);
+        }
+      }
+
       if (isset($purchasedEntity->printful_reference) && !empty($purchasedEntity->printful_reference->first()->printful_id)) {
         $printful_items[] = [
           'external_variant_id' => $purchasedEntity->printful_reference->first()->printful_id,
