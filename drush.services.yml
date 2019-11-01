@@ -1,0 +1,6 @@
+services:
+  commerce_printful.commands:
+    class: \Drupal\commerce_printful\Commands\CommercePrintfulCommands
+    arguments: ['@commerce_printful.printful', '@commerce_printful.product_integrator', '@entity_type.bundle.info', '@config.factory']
+    tags:
+      - { name: drush.command }

@@ -38,7 +38,7 @@ class PrintfulSyncBatch {
    * @param array $context
    *   Batch context.
    */
-  public static function doSync($product_bundle, $update, array &$context) {
+  public static function doSync($product_bundle, $update, &$context) {
     $integrator = \Drupal::service('commerce_printful.product_integrator');
 
     // Get config.

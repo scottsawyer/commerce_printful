@@ -9,5 +9,12 @@
   "support": {
     "issues": "http://drupal.org/project/issues/commerce_printful",
     "source": "http://cgit.drupalcode.org/commerce_printful"
+  },
+  "extra": {
+    "drush": {
+      "services": {
+        "drush.services.yml": "^9"
+      }
+    }
   }
 }
