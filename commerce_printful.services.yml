@@ -11,7 +11,7 @@ services:
   # Order integrator service.
   commerce_printful.order_integrator:
     class: Drupal\commerce_printful\Service\OrderIntegrator
-    arguments: ['@commerce_printful.printful']
+    arguments: ['@commerce_printful.printful', '@config.factory', '@logger.factory']
 
   commerce_printful.order_subscriber:
     class: Drupal\commerce_printful\EventSubscriber\OrderEventSubscriber

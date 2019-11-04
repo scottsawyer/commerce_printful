@@ -237,10 +237,26 @@ class PrintfulConfigForm extends ConfigFormBase {
           '#options' => $image_field_options,
           '#default_value' => isset($product_sync_data[$bundle_id]['attribute_mapping']['image']) ? $product_sync_data[$bundle_id]['attribute_mapping']['image'] : NULL,
         ];
-
-
-
       }
+
+      // Orders synchronization settings section.
+      $form['order_sync'] = [
+        '#type' => 'fieldset',
+        '#title' => $this->t('Order synchronization settings'),
+      ];
+
+      $form['order_sync']['sync_orders'] = [
+        '#type' => 'checkbox',
+        '#title' => $this->t('Enable order synchronization'),
+        '#description' => $this->t('Paid orders will be sent to Printful'),
+        '#default_value' => $config->get('sync_orders'),
+      ];
+      $form['order_sync']['draft_orders'] = [
+        '#type' => 'checkbox',
+        '#title' => $this->t('Export orders as drafts'),
+        '#description' => $this->t("Printful orders will be created as drafts so it'll be possible to review and approve them. Turn this on if you're not sure if all works as expected."),
+        '#default_value' => $config->get('draft_orders'),
+      ];
 
     }
 
@@ -292,6 +308,8 @@ class PrintfulConfigForm extends ConfigFormBase {
     // Save connection config values.
     $config->set('api_base_url', $values['api_base_url']);
     $config->set('api_key', $values['api_key']);
+    $config->set('sync_orders', $values['sync_orders']);
+    $config->set('draft_orders', $values['draft_orders']);
 
     // Save product variation sync data and update variation bundles
     // field instances if needed.

@@ -264,7 +264,7 @@ class ProductIntegrator implements ProductIntegratorInterface {
         $file_directory = $variation->{$field_name}->getFieldDefinition()->getSetting('file_directory');
         $uri_scheme = $variation->{$field_name}->getFieldDefinition()->getFieldStorageDefinition()->getSetting('uri_scheme');
         $destination_dir = $uri_scheme . '://' . $file_directory;
-        if (!$this->fileSystem->prepareDirectory($destination_dir, FileSystemInterface::CREATE_DIRECTORY)) {
+        if (!$this->fileSystem->prepareDirectory($destination_dir, FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS)) {
           throw new PrintfulException(sprintf('Variant image target directory (%s) problem.', $destination_dir));
         }
 

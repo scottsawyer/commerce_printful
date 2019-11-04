@@ -29,6 +29,10 @@ class Printful implements PrintfulInterface {
       'path' => 'shipping/rates',
       'method' => 'POST',
     ],
+    'createOrder' => [
+      'path' => 'orders',
+      'method' => 'POST',
+    ],
   ];
 
   /**
@@ -101,7 +105,7 @@ class Printful implements PrintfulInterface {
 
     $uri = $this->baseUrl . $request_options['path'];
 
-    // TODO: Add more error handling here with time and tests.
+    // TODO: Add more error handling here with time and tests if required.
     try {
       $response = $this->client->request($request_options['method'], $uri, $options);
 
@@ -113,7 +117,7 @@ class Printful implements PrintfulInterface {
     catch (ClientException $e) {
       $output = json_decode($e->getResponse()->getBody()->getContents(), TRUE);
       $message = isset($output['error']['message']) ? $output['error']['message'] : 'Unknown error';
-      throw new PrintfulException($message);
+      throw new PrintfulException($message, $request_options);
     }
 
   }
@@ -146,7 +150,14 @@ class Printful implements PrintfulInterface {
           $request_options['query'] = $parameters;
         }
         else {
-          $request_options['body'] = $parameters;
+          if (isset($parameters['body'])) {
+            $request_options['body'] = $parameters['body'];
+            unset($parameters['body']);
+            $request_options['query'] = $parameters;
+          }
+          else {
+            $request_options['body'] = $parameters;
+          }
         }
       }
     }

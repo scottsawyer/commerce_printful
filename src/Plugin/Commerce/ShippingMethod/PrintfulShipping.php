@@ -4,6 +4,7 @@ namespace Drupal\commerce_printful\Plugin\Commerce\ShippingMethod;
 
 use Drupal\commerce_shipping\Plugin\Commerce\ShippingMethod\ShippingMethodBase;
 use Drupal\commerce_currency_resolver\Plugin\Commerce\CommerceCurrencyResolverAmountTrait;
+use Drupal\commerce_printful\OrderItemsTrait;
 use Drupal\commerce_printful\Service\PrintfulInterface;
 use Psr\Log\LoggerInterface;
 use Drupal\Core\Config\ImmutableConfig;
@@ -29,6 +30,7 @@ class PrintfulShipping extends ShippingMethodBase {
   use CommerceCurrencyResolverAmountTrait {
     buildConfigurationForm as public currencyBuildConfigurationForm;
   }
+  use OrderItemsTrait;
 
   /**
    * The printful API service.
@@ -131,45 +133,18 @@ class PrintfulShipping extends ShippingMethodBase {
 
     $rates = [];
 
-    $order = $shipment->getOrder();
-    $printful_items = [];
+    $request_data = $this->getRequestData($shipment);
 
-    // For now let's assume all the items in the cart are from the same Printful
-    // store. TODO: check how this works with multiple stores.
-    $api_key = '';
-    foreach ($shipment->getOrder()->getItems() as $orderItem) {
-      $purchasedEntity = $orderItem->getPurchasedEntity();
+    if (!empty($request_data)) {
 
-      if (empty($api_key)) {
-        $product_bundle = $purchasedEntity->getProduct()->bundle();
-        if (!empty($this->integrationSettings[$product_bundle]['api_key'])) {
-          $api_key = $this->integrationSettings[$product_bundle]['api_key'];
-          $this->pf->setConnectionInfo(['api_key' => $api_key]);
+      // Set API key if not default.
+      // @see Drupal\commerce_printful\Service\OrderIntegrator::createPrintfulOrder().
+      if (!empty($request_data['_product_bundle'])) {
+        if (!empty($this->integrationSettings[$request_data['_product_bundle']]['api_key'])) {
+          $this->pf->setConnectionInfo(['api_key' => $this->integrationSettings[$request_data['_product_bundle']]['api_key']]);
         }
+        unset($request_data['_product_bundle']);
       }
-
-      if (isset($purchasedEntity->printful_reference) && !empty($purchasedEntity->printful_reference->first()->printful_id)) {
-        $printful_items[] = [
-          'external_variant_id' => $purchasedEntity->printful_reference->first()->printful_id,
-          'quantity' => $orderItem->getQuantity(),
-          // TODO: We could include value here but docs don't specify currency,
-          // probably conversion to USD would be needed.
-        ];
-      }
-    }
-
-    if (!empty($printful_items)) {
-      $address = $shipment->getShippingProfile()->get('address')->first()->getValue();
-      $request_data = [
-        'recipient' => [
-          'address1' => $address['address_line1'],
-          'city' => $address['locality'],
-          'country_code' => $address['country_code'],
-          'state_code' => !empty($address['administrative_area']) ? $address['administrative_area'] : NULL,
-          'zip' => $address['postal_code'],
-        ],
-        'items' => $printful_items,
-      ];
 
       try {
         $result = $this->pf->shippingRates($request_data);
@@ -183,12 +158,10 @@ class PrintfulShipping extends ShippingMethodBase {
         ksort($rates);
       }
       catch (PrintfulException $e) {
-        // TODO: Save request data to PrintfulException.
         $this->logger->error(
-          "Couldn't load shipping data. Error: @error, input: @input",
+          "Couldn't load shipping data. Error: @details",
           [
-            '@error' => $e->getMessage(),
-            '@input' => json_encode($request_data),
+            '@details' => $e->getFullInfo(),
           ]
         );
       }
