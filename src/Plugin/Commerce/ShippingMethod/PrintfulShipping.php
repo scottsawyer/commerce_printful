@@ -151,6 +151,15 @@ class PrintfulShipping extends ShippingMethodBase {
 
         foreach ($result['result'] as $printful_shipping_option) {
           $price = new Price($printful_shipping_option['rate'], $printful_shipping_option['currency']);
+
+          // Support other currencies.
+          if ($this->shouldCurrencyRefresh()) {
+            // If current currency does not match to shipment code.
+            if ($this->currentCurrency() !== $price->getCurrencyCode()) {
+              $price = $this->getPrice($price, $this->currentCurrency());
+            }
+          }
+
           $service = new ShippingService($printful_shipping_option['id'], $printful_shipping_option['name']);
           $rates[$printful_shipping_option['rate']] = new ShippingRate($printful_shipping_option['id'], $service, $price);
         }

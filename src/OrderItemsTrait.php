@@ -3,6 +3,7 @@
 namespace Drupal\commerce_printful;
 
 use Drupal\commerce_shipping\Entity\ShipmentInterface;
+use Drupal\commerce_currency_resolver\CurrencyHelper;
 
 /**
  * Common Order data fetvching functionality.
@@ -36,6 +37,8 @@ trait OrderItemsTrait {
       if ($more) {
         $output['recipient']['name'] = $address['given_name'] . ' ' . $address['family_name'];
         $output['recipient']['company'] = $address['organization'];
+        $store_info = $this->pf->getStoreInfo();
+        $pf_currency = $store_info['result']['currency'];
       }
 
       // Without the recipient we have nothing to do so the rest of the logic
@@ -66,8 +69,14 @@ trait OrderItemsTrait {
             // probably conversion to USD would be needed.
           ];
           if ($more) {
+            $totalPrice = $orderItem->getTotalPrice();
+
+            // Convert currency to Printful default if required.
+            if ($totalPrice->getCurrencyCode() !== $pf_currency) {
+              $totalPrice = CurrencyHelper::priceConversion($totalPrice, $pf_currency);
+            }
             $item['name'] = $purchasedEntity->label();
-            $item['retail_price'] = (string) $orderItem->getTotalPrice();
+            $item['retail_price'] = (string) $totalPrice;
             $item['sku'] = $purchasedEntity->getSku();
           }
           $output['items'][] = $item;
