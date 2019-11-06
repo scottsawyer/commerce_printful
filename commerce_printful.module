@@ -5,6 +5,8 @@
  * Provides Printful integration for Drupal Commerce.
  */
 
+use Drupal\Core\Routing\RouteMatchInterface;
+
 /**
  * Implements hook_help().
  */

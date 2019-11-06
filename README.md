@@ -36,7 +36,7 @@ Printful store.
 Additional notes
 ----------------
 Probably everyone will wonder why sometimes Printful order external IDs don't correspond
-to Drupal Commerce order ids. It's because those are shipment IDs and not order IDs.
+to Drupal Commerce order IDs. It's because those are shipment IDs and not order IDs.
 a Commerce order can have many shipments, each for certain items and each using different
 shipping methods so we have to reference shipments not orders.
 In simple stores though every order will have one shipment and order and shipment IDs will
