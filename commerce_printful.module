@@ -4,3 +4,19 @@
  * @file
  * Provides Printful integration for Drupal Commerce.
  */
+
+/**
+ * Implements hook_help().
+ */
+function commerce_printful_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    case 'help.page.commerce_printful':
+      $filepath = dirname(__FILE__) . '/README.md';
+      if (file_exists($filepath)) {
+        $readme = file_get_contents($filepath);
+        $output = '<pre>' . $readme . '</pre>';
+
+        return $output;
+      }
+  }
+}

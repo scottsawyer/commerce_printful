@@ -93,7 +93,7 @@ class OrderIntegrator implements OrderIntegratorInterface {
           }
           $request['body'] = $shipment_request_data;
           $request['body']['shipping'] = $shipment->getShippingService();
-          $request['body']['external_id'] = $order->id();
+          $request['body']['external_id'] = $shipment->id();
 
           try {
             $result = $this->pf->createOrder($request);
