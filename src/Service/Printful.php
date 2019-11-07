@@ -33,6 +33,17 @@ class Printful implements PrintfulInterface {
       'path' => 'orders',
       'method' => 'POST',
     ],
+    'getWebhooks' => [
+      'path' => 'webhooks',
+    ],
+    'setWebhooks' => [
+      'path' => 'webhooks',
+      'method' => 'POST',
+    ],
+    'unsetWebhooks' => [
+      'path' => 'webhooks',
+      'method' => 'DELETE',
+    ],
   ];
 
   /**

@@ -7,12 +7,6 @@ commerce_printful.settings:
     api_key:
       type: string
       label: 'Printful API key'
-    sync_orders:
-      type: boolean
-      label: 'Should paid orders be sent to Printful?'
-    draft_orders:
-      type: boolean
-      label: 'Should orders be exported as drafts?'
     product_sync_data:
       type: sequence
       label: 'Product variation bundles that will be synchronized with Printful'
@@ -35,3 +29,12 @@ commerce_printful.settings:
                 type: string
               image:
                 type: string
+    sync_orders:
+      type: boolean
+      label: 'Should paid orders be sent to Printful?'
+    draft_orders:
+      type: boolean
+      label: 'Should orders be exported as drafts?'
+    webhooks:
+      type: sequence
+      label: 'Enabled webhooks'

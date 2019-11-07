@@ -8,6 +8,7 @@ use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\commerce_printful\Service\PrintfulInterface;
+use Symfony\Component\HttpFoundation\Request;
 use Drupal\Core\Form\FormStateInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\field\Entity\FieldStorageConfig;
@@ -38,7 +39,7 @@ class PrintfulConfigForm extends ConfigFormBase {
    *
    * @var \Drupal\commerce_printful\Service\PrintfulInterface
    */
-  protected $printful;
+  protected $pf;
 
   /**
    * A list of product variation bundles.
@@ -46,6 +47,13 @@ class PrintfulConfigForm extends ConfigFormBase {
    * @var array
    */
   protected $productBundles;
+
+  /**
+   * The current request.
+   *
+   * @var \Symfony\Component\HttpFoundation\Request
+   */
+  protected $request;
 
   /**
    * Creates a new PrintfulConfigForm instance.
@@ -58,15 +66,18 @@ class PrintfulConfigForm extends ConfigFormBase {
    *   The entity field manager.
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entityTypeManager
    *   The entity type manager.
-   * @param \Drupal\commerce_printful\Service\PrintfulInterface $printful
+   * @param \Drupal\commerce_printful\Service\PrintfulInterface $pf
    *   The Printful API service.
+   * @param \Symfony\Component\HttpFoundation\Request $request
+   *   The current request.
    */
   public function __construct(
     ConfigFactoryInterface $config_factory,
     EntityTypeBundleInfoInterface $bundleInfo,
     EntityFieldManagerInterface $entityFieldManager,
     EntityTypeManagerInterface $entityTypeManager,
-    PrintfulInterface $printful
+    PrintfulInterface $pf,
+    Request $request
   ) {
     parent::__construct($config_factory);
 
@@ -80,7 +91,8 @@ class PrintfulConfigForm extends ConfigFormBase {
       $this->stores[$store_id] = $store->label();
     }
 
-    $this->printful = $printful;
+    $this->pf = $pf;
+    $this->request = $request;
   }
 
   /**
@@ -92,7 +104,8 @@ class PrintfulConfigForm extends ConfigFormBase {
       $container->get('entity_type.bundle.info'),
       $container->get('entity_field.manager'),
       $container->get('entity_type.manager'),
-      $container->get('commerce_printful.printful')
+      $container->get('commerce_printful.printful'),
+      $container->get('request_stack')->getCurrentRequest()
     );
   }
 
@@ -109,6 +122,7 @@ class PrintfulConfigForm extends ConfigFormBase {
   public function buildForm(array $form, FormStateInterface $form_state) {
 
     $config = $this->config('commerce_printful.settings');
+    $api_key = $config->get('api_key');
 
     $form['connection'] = [
       '#type' => 'fieldset',
@@ -146,7 +160,7 @@ class PrintfulConfigForm extends ConfigFormBase {
     $form['connection']['api_key'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Default API key'),
-      '#default_value' => $config->get('api_key'),
+      '#default_value' => $api_key,
     ];
 
     $form['product_sync_data'] = [
@@ -258,6 +272,38 @@ class PrintfulConfigForm extends ConfigFormBase {
         '#default_value' => $config->get('draft_orders'),
       ];
 
+      // Webhooks setup.
+      if ($api_key) {
+        $form['webhooks'] = [
+          '#type' => 'fieldset',
+          '#title' => $this->t('Webhook events settings'),
+          '#tree' => TRUE,
+        ];
+
+        try {
+          $webhooks = $this->pf->getWebhooks();
+          $form_state->set('printful_webhooks', $webhooks['result']['types']);
+
+          foreach ([
+            'package_shipped' => $this->t('Package shipped'),
+          ] as $event => $label) {
+            $form['webhooks'][$event] = [
+              '#type' => 'checkbox',
+              '#title' => $label,
+              '#default_value' => in_array($event, $webhooks['result']['types'], TRUE),
+            ];
+          }
+        }
+        catch (PrintfulException $e) {
+          $form['webhooks']['summary'] = [
+            '#markup' => $this->t('Unable to fetch webhook info from the API: @error', [
+              '@error' => $e->getMessage(),
+            ]),
+          ];
+        }
+
+      }
+
     }
 
     return parent::buildForm($form, $form_state);
@@ -278,12 +324,12 @@ class PrintfulConfigForm extends ConfigFormBase {
         $form_state->setValue('api_base_url', $api_base_url);
       }
 
-      $this->printful->setConnectionInfo([
+      $this->pf->setConnectionInfo([
         'api_base_url' => $api_base_url,
         'api_key' => $api_key,
       ]);
       try {
-        $result = $this->printful->getStoreInfo();
+        $result = $this->pf->getStoreInfo();
         $this->messenger()->addStatus($this->t('Successfully conected to the "@store" Printful store.', [
           '@store' => $result['result']['name'],
         ]));
@@ -363,6 +409,33 @@ class PrintfulConfigForm extends ConfigFormBase {
     $config->set('product_sync_data', $product_sync_data);
 
     $config->save();
+
+    // Update webhooks settings if required.
+    $webhooks = $form_state->get('printful_webhooks');
+    if (!is_null($webhooks)) {
+      $update_webhooks = FALSE;
+      $event_types = [];
+      foreach ($values['webhooks'] as $webhook => $state) {
+        if ($state) {
+          if (!in_array($webhook, $webhooks, TRUE)) {
+            $update_webhooks = TRUE;
+          }
+          $event_types[] = $webhook;
+        }
+        elseif (in_array($webhook, $webhooks, TRUE)) {
+          $update_webhooks = TRUE;
+        }
+      }
+      if ($update_webhooks) {
+        $this->pf->unsetWebhooks();
+        if (!empty($event_types)) {
+          $response = $this->pf->setWebhooks([
+            'url' => $this->request->getSchemeAndHttpHost() . '/commerce-printful/webhooks',
+            'types' => $event_types,
+          ]);
+        }
+      }
+    }
 
     $this->messenger()->addStatus($this->t('Printful configuration updated.'));
   }

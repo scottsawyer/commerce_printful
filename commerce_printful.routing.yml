@@ -25,3 +25,11 @@ commerce_printful.synchronization:
     _permission: 'administer commerce printful'
   options:
     _admin_route: TRUE
+
+commerce_printful.webhooks:
+  path: '/commerce-printful/webhooks'
+  defaults:
+    _controller: '\Drupal\commerce_printful\Controller\PrintfulController::webhooks'
+    _title: 'Webhooks'
+  requirements:
+    _access: 'TRUE'
