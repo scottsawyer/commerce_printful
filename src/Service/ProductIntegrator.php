@@ -304,28 +304,31 @@ class ProductIntegrator implements ProductIntegratorInterface {
       $item->delete();
     }
 
-    // Get attribute bundle from field name (TODO: no better way to do it?
-    // Getting it from handler settings doesn't seem like good idea as well).
-    $attibute_value_bundle = substr($field_name, strpos($field_name, '_') + 1);
+    // Sometimes the attribute may not be available in more general setups.
+    if (isset($variant_parameters[$attribute])) {
+      // Get attribute bundle from field name (TODO: no better way to do it?
+      // Getting it from handler settings doesn't seem like good idea as well).
+      $attibute_value_bundle = substr($field_name, strpos($field_name, '_') + 1);
 
-    $properties = [
-      'attribute' => $attibute_value_bundle,
-      'name' => $variant_parameters[$attribute],
-    ];
+      $properties = [
+        'attribute' => $attibute_value_bundle,
+        'name' => $variant_parameters[$attribute],
+      ];
 
-    $attributeValueStorage = $this->entityTypeManager->getStorage('commerce_product_attribute_value');
-    $result = $attributeValueStorage->loadByProperties($properties);
-    if (!empty($result)) {
-      $attribute = reset($result);
+      $attributeValueStorage = $this->entityTypeManager->getStorage('commerce_product_attribute_value');
+      $result = $attributeValueStorage->loadByProperties($properties);
+      if (!empty($result)) {
+        $attribute = reset($result);
+      }
+      else {
+        $attribute = $attributeValueStorage->create($properties);
+        $attribute->save();
+      }
+
+      $variation->{$field_name}[0] = [
+        'target_id' => $attribute->id(),
+      ];
     }
-    else {
-      $attribute = $attributeValueStorage->create($properties);
-      $attribute->save();
-    }
-
-    $variation->{$field_name}[0] = [
-      'target_id' => $attribute->id(),
-    ];
   }
 
 }
