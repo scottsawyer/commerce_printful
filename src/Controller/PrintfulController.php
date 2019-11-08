@@ -51,9 +51,12 @@ class PrintfulController extends ControllerBase {
    */
   protected function packageShipped($data) {
     $shipment = $this->entityTypeManager()->getStorage('commerce_shipment')->load($data['order']['external_id']);
-    $shipment->setShippedTime($data['shipment']['created']);
-    $shipment->setTrackingCode($data['shipment']['tracking_url']);
-    $shipment->save();
+    if ($shipment) {
+      $shipment->setShippedTime($data['shipment']['created']);
+      $shipment->setTrackingCode($data['shipment']['tracking_number']);
+      $shipment->setShippingService($data['shipment']['service']);
+      $shipment->save();
+    }
   }
 
 }
