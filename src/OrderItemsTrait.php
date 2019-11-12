@@ -24,6 +24,8 @@ trait OrderItemsTrait {
   protected function getRequestData(ShipmentInterface $shipment, $more = FALSE) {
     $output = [];
 
+    $printful_stores = \Drupal::entityTypeManager()->getStorage('printful_store')->loadMultiple();
+
     if (!$shipment->getShippingProfile()->get('address')->isEmpty()) {
       $address = $shipment->getShippingProfile()->get('address')->first()->getValue();
       $output['recipient'] = [
@@ -57,8 +59,14 @@ trait OrderItemsTrait {
         // Add product bundle information to optionally set API key in the parent method.
         // TODO: maybe a better way to structure this, with the current data structure
         // one shouldn't use different product bundles within one shipment.
-        if (empty($output['_product_bundle'])) {
-          $output['_product_bundle'] = $purchasedEntity->getProduct()->bundle();
+        if (empty($output['_printful_store'])) {
+          $product_bundle = $purchasedEntity->getProduct()->bundle();
+          foreach ($printful_stores as $printful_store) {
+            if ($printful_store->get('productBundle') == $product_bundle) {
+              $output['_printful_store'] = $printful_store;
+              break;
+            }
+          }
         }
 
         if (isset($purchasedEntity->printful_reference) && !empty($purchasedEntity->printful_reference->first()->printful_id)) {

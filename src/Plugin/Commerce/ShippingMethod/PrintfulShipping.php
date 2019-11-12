@@ -139,11 +139,11 @@ class PrintfulShipping extends ShippingMethodBase {
 
       // Set API key if not default.
       // @see Drupal\commerce_printful\Service\OrderIntegrator::createPrintfulOrder().
-      if (!empty($request_data['_product_bundle'])) {
-        if (!empty($this->integrationSettings[$request_data['_product_bundle']]['api_key'])) {
-          $this->pf->setConnectionInfo(['api_key' => $this->integrationSettings[$request_data['_product_bundle']]['api_key']]);
-        }
-        unset($request_data['_product_bundle']);
+      if (!empty($request_data['_printful_store'])) {
+        $this->pf->setConnectionInfo([
+          'api_key' => $request_data['_printful_store']->get('apiKey'),
+        ]);
+        unset($request_data['_printful_store']);
       }
 
       try {

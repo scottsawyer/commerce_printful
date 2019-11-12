@@ -103,4 +103,77 @@ class PrintfulStore extends ConfigEntityBase implements PrintfulStoreInterface {
    */
   protected $webhooks;
 
+  /**
+   * {@inheritdoc}
+   */
+  public function save() {
+    $originalBundle = '';
+    if (isset($this->originalValues['productBundle'])) {
+      $originalBundle = $this->originalValues['productBundle'];
+    }
+
+    if ($originalBundle != $this->productBundle) {
+      $product_field_storage = FieldStorageConfig::loadByName('commerce_product', 'printful_reference');
+      $variation_field_storage = FieldStorageConfig::loadByName('commerce_product_variation', 'printful_reference');
+
+      // Create Printful reference fields for product and variation types.
+      $field = FieldConfig::loadByName('commerce_product', $this->productBundle, 'printful_reference');
+      if (empty($field)) {
+        $field = FieldConfig::create([
+          'field_storage' => $product_field_storage,
+          'bundle' => $this->productBundle,
+          'label' => $this->t('Printful reference'),
+          'settings' => [],
+        ]);
+        $field->save();
+      }
+
+      $variation_bundle_id = $this->entityTypeManager()->getStorage('commerce_product_type')->load($this->productBundle)->getVariationTypeId();
+      $field = FieldConfig::loadByName('commerce_product_variation', $variation_bundle_id, 'printful_reference');
+      if (empty($field)) {
+        $field = FieldConfig::create([
+          'field_storage' => $variation_field_storage,
+          'bundle' => $variation_bundle_id,
+          'label' => $this->t('Printful reference'),
+          'settings' => [],
+        ]);
+        $field->save();
+      }
+
+      // Delete unused fields.
+      if (!empty($originalBundle)) {
+        $field = FieldConfig::loadByName('commerce_product', $originalBundle, 'printful_reference');
+        if (!empty($field)) {
+          $field->delete();
+        }
+
+        $variation_bundle_id = $this->entityTypeManager()->getStorage('commerce_product_type')->load($originalBundle)->getVariationTypeId();
+        $field = FieldConfig::loadByName('commerce_product_variation', $variation_bundle_id, 'printful_reference');
+        if (!empty($field)) {
+          $field->delete();
+        }
+      }
+    }
+
+    parent::save();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function delete() {
+    $field = FieldConfig::loadByName('commerce_product', $this->productBundle, 'printful_reference');
+    if (!empty($field)) {
+      $field->delete();
+    }
+
+    $variation_bundle_id = $this->entityTypeManager()->getStorage('commerce_product_type')->load($this->productBundle)->getVariationTypeId();
+    $field = FieldConfig::loadByName('commerce_product_variation', $variation_bundle_id, 'printful_reference');
+    if (!empty($field)) {
+      $field->delete();
+    }
+
+    parent::delete();
+  }
+
 }

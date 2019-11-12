@@ -3,6 +3,7 @@
 namespace Drupal\commerce_printful\Controller;
 
 use Drupal\Core\Controller\ControllerBase;
+use Drupal\commerce_printful\Entity\PrintfulStoreInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpFoundation\Response;
@@ -20,7 +21,6 @@ class PrintfulController extends ControllerBase {
    * Webhooks router.
    */
   public function webhooks(Request $request) {
-
     // All webhook calls are performed using POST.
     if ($request->getMethod() !== 'POST') {
       throw new BadRequestHttpException('Invalid request method.');

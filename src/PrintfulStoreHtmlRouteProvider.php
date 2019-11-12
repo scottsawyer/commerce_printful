@@ -20,17 +20,14 @@ class PrintfulStoreHtmlRouteProvider extends AdminHtmlRouteProvider {
   public function getRoutes(EntityTypeInterface $printful_store) {
     $collection = parent::getRoutes($printful_store);
 
-    // Add webhook routes.
-    if (!empty($printful_store->webhooks)) {
-      foreach ($printful_store->webhooks as $webhook => $state) {
-        if ($state) {
-          $route = new Route('/commerce-printful/webhooks/{printful_store}');
-          $route->setDefault('_controller', '\Drupal\commerce_printful\Controller\PrintfulController::webhooks');
-          $route->setDefault('_title', '::addTitle');
-          $route->setDefault('printful_store', $printful_store->id());
-        }
-      }
-    }
+    // Add webhook route.
+    $route = new Route('/commerce-printful/webhooks');
+    $route->setDefault('_controller', '\Drupal\commerce_printful\Controller\PrintfulController::webhooks');
+    $route->setDefault('_title', 'Webhooks');
+    $route->setRequirements([
+      '_access' => 'TRUE',
+    ]);
+    $collection->add("commerce_printful.webhooks", $route);
 
     // Provide your custom entity routes here.
     return $collection;

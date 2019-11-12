@@ -4,8 +4,8 @@ namespace Drupal\commerce_printful\Service;
 
 use Drupal\commerce_printful\OrderItemsTrait;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
+use Drupal\commerce_printful\Entity\PrintfulStoreInterface;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_printful\Exception\PrintfulException;
 
@@ -25,11 +25,11 @@ class OrderIntegrator implements OrderIntegratorInterface {
   protected $pf;
 
   /**
-   * Integration configuration.
+   * Printful store config entity.
    *
-   * @var array
+   * @var \Drupal\commerce_printful\Entity\PrintfulStoreInterface
    */
-  protected $configuration = [];
+  protected $printfulStore;
 
   /**
    * Logger for this plugin.
@@ -43,23 +43,25 @@ class OrderIntegrator implements OrderIntegratorInterface {
    *
    * @param \Drupal\commerce_printful\Service\Printful $pf
    *   The printful API service.
-   * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
-   *   The config factory object.
    * @param \Drupal\Core\Logger\LoggerChannelFactoryInterface $logger_factory
    *   The logger factory.
    */
   public function __construct(
     Printful $pf,
-    ConfigFactoryInterface $config_factory,
     LoggerChannelFactoryInterface $logger_factory
   ) {
     $this->pf = $pf;
-
-    $config = $config_factory->get('commerce_printful.settings');
-    $this->configuration['draft_orders'] = $config->get('draft_orders');
-    $this->configuration['product_sync_data'] = $config->get('product_sync_data');
-
     $this->logger = $logger_factory->get('commerce_printful');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setPrintfulStore(PrintfulStoreInterface $printful_store) {
+    $this->printfulStore = $printful_store;
+    $this->pf->setConnectionInfo([
+      'api_key' => $printful_store->get('apiKey'),
+    ]);
   }
 
   /**
@@ -67,7 +69,6 @@ class OrderIntegrator implements OrderIntegratorInterface {
    */
   public function createPrintfulOrder(OrderInterface $order) {
     $request = [
-      'confirm' => empty($this->configuration['draft_orders']),
       'update_existing' => TRUE,
     ];
 
@@ -83,14 +84,13 @@ class OrderIntegrator implements OrderIntegratorInterface {
         if (!empty($shipment_request_data)) {
           // Set API key if not default.
           // @see Drupal\commerce_printful\Plugin\Commerce\ShippingMethod\PrintfulShipping::calculateRates().
-          if (!empty($shipment_request_data['_product_bundle'])) {
-            if (!empty($this->configuration['product_sync_data'][$shipment_request_data['_product_bundle']]['api_key'])) {
-              $this->pf->setConnectionInfo([
-                'api_key' => $this->integrationSettings[$shipment_request_data['_product_bundle']]['api_key'],
-              ]);
-            }
-            unset($shipment_request_data['_product_bundle']);
+          if (!empty($shipment_request_data['_printful_store'])) {
+            $this->setPrintfulStore($shipment_request_data['_printful_store']);
+            unset($shipment_request_data['_printful_store']);
           }
+
+          $request['confirm'] = empty($this->printfulStore->get('draftOrders'));
+
           $request['body'] = $shipment_request_data;
           $request['body']['shipping'] = $shipment->getShippingService();
           $request['body']['external_id'] = $shipment->id();

@@ -3,7 +3,7 @@
 namespace Drupal\commerce_printful\Form;
 
 use Drupal\Core\Form\FormBase;
-use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\commerce_printful\PrintfulSyncBatch;
@@ -14,25 +14,17 @@ use Drupal\commerce_printful\PrintfulSyncBatch;
 class PrintfulSynchronizationForm extends FormBase {
 
   /**
-   * Config object containing module settings.
+   * Printful stores.
    *
-   * @var \Drupal\Core\Config\ImmutableConfig
+   * @var array
    */
-  protected $config;
-
-  /**
-   * The bundle info service.
-   *
-   * @var \Drupal\Core\Entity\EntityTypeBundleInfoInterface
-   */
-  protected $bundleInfo;
+  protected $printfulStores;
 
   /**
    * Constructor.
    */
-  public function __construct(EntityTypeBundleInfoInterface $bundleInfo) {
-    $this->config = $this->config('commerce_printful.settings');
-    $this->bundleInfo = $bundleInfo;
+  public function __construct(EntityTypeManagerInterface $entityTypeManager) {
+    $this->printfulStores = $entityTypeManager->getStorage('printful_store')->loadMultiple();
   }
 
   /**
@@ -40,7 +32,7 @@ class PrintfulSynchronizationForm extends FormBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('entity_type.bundle.info')
+      $container->get('entity_type.manager')
     );
   }
 
@@ -56,18 +48,15 @@ class PrintfulSynchronizationForm extends FormBase {
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
 
-    $product_bundles = $this->bundleInfo->getBundleInfo('commerce_product');
-    $product_options = [];
-    foreach ($this->config->get('product_sync_data') as $bundle_id => $data) {
-      if (isset($product_bundles[$bundle_id])) {
-        $product_options[$bundle_id] = $product_bundles[$bundle_id]['label'];
-      }
+    $stores_options = [];
+    foreach ($this->printfulStores as $store_id => $store) {
+      $stores_options[$store_id] = $store->get('label');
     }
 
-    $form['product_bundle'] = [
+    $form['printful_store_id'] = [
       '#type' => 'select',
-      '#title' => $this->t('Product type to be synchronized'),
-      '#options' => $product_options,
+      '#title' => $this->t('Printful store to be synchronized'),
+      '#options' => $stores_options,
       '#required' => TRUE,
     ];
 
@@ -91,7 +80,7 @@ class PrintfulSynchronizationForm extends FormBase {
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
     batch_set(PrintfulSyncBatch::getBatch([
-      'product_bundle' => $form_state->getValue('product_bundle'),
+      'printful_store_id' => $form_state->getValue('printful_store_id'),
       'update' => $form_state->getValue('update'),
     ]));
   }

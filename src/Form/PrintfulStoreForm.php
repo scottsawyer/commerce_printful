@@ -10,6 +10,8 @@ use Drupal\commerce_printful\Service\PrintfulInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\field\Entity\FieldStorageConfig;
+use Drupal\field\Entity\FieldConfig;
 
 /**
  * Class PrintfulStoreForm.
@@ -104,6 +106,15 @@ class PrintfulStoreForm extends EntityForm {
    */
   public function form(array $form, FormStateInterface $form_state) {
     $form = parent::form($form, $form_state);
+
+    if (!$this->entity->isNew()) {
+      $this->entity->originalValues = $this->entity->toArray();
+      if ($api_key = $this->entity->get('apiKey')) {
+        $this->pf->setConnectionInfo([
+          'api_key' => $api_key,
+        ]);
+      }
+    }
 
     $form['label'] = [
       '#type' => 'textfield',
@@ -279,6 +290,32 @@ class PrintfulStoreForm extends EntityForm {
   }
 
   /**
+   * {@inheritdoc}
+   */
+  public function validateForm(array &$form, FormStateInterface $form_state) {
+    $api_key = $form_state->getValue('apiKey');
+
+    // Validate API key and base_url if changed.
+    $config = $this->config('commerce_printful.settings');
+    if ($api_key !== $this->entity->get('apiKey')) {
+      $this->pf->setConnectionInfo([
+        'api_key' => $api_key,
+      ]);
+      try {
+        $result = $this->pf->getStoreInfo();
+        $this->messenger()->addStatus($this->t('Successfully conected to the "@store" Printful store.', [
+          '@store' => $result['result']['name'],
+        ]));
+      }
+      catch (PrintfulException $e) {
+        $form_state->setError($form['connection'], $this->t('Invalid connection data. Error: @error', [
+          '@error' => $e->getMessage(),
+        ]));
+      }
+    }
+  }
+
+  /**
    * Ajax callback.
    */
   public function ajaxForm(array $form, FormStateInterface $form_state) {
@@ -289,22 +326,48 @@ class PrintfulStoreForm extends EntityForm {
    * {@inheritdoc}
    */
   public function save(array $form, FormStateInterface $form_state) {
-    $printful_store = $this->entity;
-    $status = $printful_store->save();
+    $status = $this->entity->save();
+
+    // Update webhooks settings if required.
+    $webhooks = $form_state->get('printful_webhooks');
+    if (!is_null($webhooks)) {
+      $update_webhooks = FALSE;
+      $event_types = [];
+      foreach ($this->entity->get('webhooks') as $webhook => $state) {
+        if ($state) {
+          if (!in_array($webhook, $webhooks, TRUE)) {
+            $update_webhooks = TRUE;
+          }
+          $event_types[] = $webhook;
+        }
+        elseif (in_array($webhook, $webhooks, TRUE)) {
+          $update_webhooks = TRUE;
+        }
+      }
+      if ($update_webhooks) {
+        $this->pf->unsetWebhooks();
+        if (!empty($event_types)) {
+          $response = $this->pf->setWebhooks([
+            'url' => $this->request->getSchemeAndHttpHost() . '/commerce-printful/webhooks',
+            'types' => $event_types,
+          ]);
+        }
+      }
+    }
 
     switch ($status) {
       case SAVED_NEW:
         $this->messenger()->addMessage($this->t('Created the %label Printful store.', [
-          '%label' => $printful_store->label(),
+          '%label' => $this->entity->label(),
         ]));
         break;
 
       default:
         $this->messenger()->addMessage($this->t('Saved the %label Printful store.', [
-          '%label' => $printful_store->label(),
+          '%label' => $this->entity->label(),
         ]));
     }
-    $form_state->setRedirectUrl($printful_store->toUrl('collection'));
+    $form_state->setRedirectUrl($this->entity->toUrl('collection'));
   }
 
 }
