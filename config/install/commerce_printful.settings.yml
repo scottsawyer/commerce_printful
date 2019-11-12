@@ -1,6 +1,1 @@
 api_base_url: 'https://api.printful.com/'
-api_key: ''
-variation_sync_data: []
-sync_orders: true
-draft_orders: true
-webhooks: []

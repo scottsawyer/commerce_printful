@@ -4,35 +4,42 @@ commerce_printful.settings:
     api_base_url:
       type: string
       label: 'Printful API base URL'
-    api_key:
+
+commerce_printful.printful_store.*:
+  type: config_entity
+  label: 'Printful store configuration'
+  mapping:
+    id:
+      type: string
+      label: 'ID'
+    label:
+      type: label
+      label: 'Label'
+    uuid:
+      type: string
+    apiKey:
       type: string
       label: 'Printful API key'
-    product_sync_data:
-      type: sequence
-      label: 'Product variation bundles that will be synchronized with Printful'
-      sequence:
-        type: mapping
-        mapping:
-          commerce_store_id:
-            type: string
-            label: 'Commerce store ID'
-          api_key:
-            type: string
-            label: 'Printful API key'
-          attribute_mapping:
-            type: mapping
-            label: 'Printful attributes mapping'
-            mapping:
-              color:
-                type: string
-              size:
-                type: string
-              image:
-                type: string
-    sync_orders:
+    commerceStoreId:
+      type: string
+      label: 'Commerce store ID'
+    productBundle:
+      type: string
+      label: 'Commerce Product type to sync with this store'
+    attributeMapping:
+      type: mapping
+      label: 'Printful attributes mapping'
+      mapping:
+        color:
+          type: string
+        size:
+          type: string
+        image:
+          type: string
+    syncOrders:
       type: boolean
       label: 'Should paid orders be sent to Printful?'
-    draft_orders:
+    draftOrders:
       type: boolean
       label: 'Should orders be exported as drafts?'
     webhooks:

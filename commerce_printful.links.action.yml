@@ -1,0 +1,5 @@
+entity.printful_store.add_form:
+  route_name: entity.printful_store.add_form
+  title: 'Add Printful store'
+  appears_on:
+    - entity.printful_store.collection
