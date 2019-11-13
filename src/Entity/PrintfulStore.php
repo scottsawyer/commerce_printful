@@ -3,6 +3,8 @@
 namespace Drupal\commerce_printful\Entity;
 
 use Drupal\Core\Config\Entity\ConfigEntityBase;
+use Drupal\field\Entity\FieldStorageConfig;
+use Drupal\field\Entity\FieldConfig;
 
 /**
  * Defines the Printful store entity.
