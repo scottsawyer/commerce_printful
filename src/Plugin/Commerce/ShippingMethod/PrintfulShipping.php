@@ -153,7 +153,7 @@ class PrintfulShipping extends ShippingMethodBase {
           $price = new Price($printful_shipping_option['rate'], $printful_shipping_option['currency']);
 
           // Support other currencies.
-          if ($this->shouldCurrencyRefresh()) {
+          if ($this->shouldCurrencyRefresh($this->currentCurrency())) {
             // If current currency does not match to shipment code.
             if ($this->currentCurrency() !== $price->getCurrencyCode()) {
               $price = $this->getPrice($price, $this->currentCurrency());

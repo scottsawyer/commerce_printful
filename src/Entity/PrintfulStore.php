@@ -3,6 +3,8 @@
 namespace Drupal\commerce_printful\Entity;
 
 use Drupal\Core\Config\Entity\ConfigEntityBase;
+use Drupal\field\Entity\FieldStorageConfig;
+use Drupal\field\Entity\FieldConfig;
 
 /**
  * Defines the Printful store entity.
@@ -122,7 +124,7 @@ class PrintfulStore extends ConfigEntityBase implements PrintfulStoreInterface {
         $field = FieldConfig::create([
           'field_storage' => $product_field_storage,
           'bundle' => $this->productBundle,
-          'label' => $this->t('Printful reference'),
+          'label' => 'Printful reference',
           'settings' => [],
         ]);
         $field->save();
@@ -134,7 +136,7 @@ class PrintfulStore extends ConfigEntityBase implements PrintfulStoreInterface {
         $field = FieldConfig::create([
           'field_storage' => $variation_field_storage,
           'bundle' => $variation_bundle_id,
-          'label' => $this->t('Printful reference'),
+          'label' => 'Printful reference',
           'settings' => [],
         ]);
         $field->save();
