@@ -37,6 +37,17 @@ use Drupal\field\Entity\FieldConfig;
  *     "edit-form" = "/admin/commerce/config/printful/printful_store/{printful_store}/edit",
  *     "delete-form" = "/admin/commerce/config/printful/printful_store/{printful_store}/delete",
  *     "collection" = "/admin/commerce/config/printful/printful_store"
+ *   },
+ *   config_export = {
+ *     "id",
+ *     "label",
+ *     "apiKey",
+ *     "commerceStoreId",
+ *     "productBundle",
+ *     "attributeMapping",
+ *     "syncOrders",
+ *     "draftOrders",
+ *     "webhooks",
  *   }
  * )
  */
