@@ -83,7 +83,6 @@ class Printful implements PrintfulInterface {
 
     $config = $config_factory->get('commerce_printful.settings');
     $this->baseUrl = $config->get('api_base_url');
-    $this->apiKey = $config->get('api_key');
   }
 
   /**
@@ -137,6 +136,10 @@ class Printful implements PrintfulInterface {
    * {@inheritdoc}
    */
   public function __call($method, $parameters) {
+    if (empty($this->apiKey)) {
+      throw new PrintfulException('API key not set.');
+    }
+
     if (!array_key_exists($method, self::METHODS)) {
       throw new PrintfulException('Unsupported method');
     }
