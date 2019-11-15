@@ -3,7 +3,8 @@
 namespace Drupal\commerce_printful\Commands;
 
 use Consolidation\AnnotatedCommand\AnnotationData;
-use Drupal\commerce_printful\Service\Printful;
+use Drupal\commerce_printful\Entity\PrintfulStoreInterface;
+use Drupal\commerce_printful\Service\PrintfulInterface;
 use Drupal\commerce_printful\PrintfulSyncBatch;
 use Drupal\commerce_printful\Exception\PrintfulException;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
@@ -27,9 +28,9 @@ use Symfony\Component\Console\Question\ChoiceQuestion;
 class CommercePrintfulCommands extends DrushCommands {
 
   /**
-   * Drupal\commerce_printful\Service\Printful definition.
+   * Drupal\commerce_printful\Service\PrintfulInterface definition.
    *
-   * @var \Drupal\commerce_printful\Service\Printful
+   * @var \Drupal\commerce_printful\Service\PrintfulInterface
    */
   protected $pf;
 
@@ -48,10 +49,17 @@ class CommercePrintfulCommands extends DrushCommands {
   protected $printfulStores;
 
   /**
+   * Drupal\commerce_print\Entity\PrintfulStoreInterface definition.
+   *
+   * @var \Drupal\commerce_printful\Entity\PrintfulStoreInterface
+   */
+  protected $printfulStore;
+
+  /**
    * {@inheritdoc}
    */
   public function __construct(
-    Printful $printful,
+    PrintfulInterface $printful,
     EntityTypeManagerInterface $entity_type_manager
   ) {
     $this->pf = $printful;
@@ -65,10 +73,18 @@ class CommercePrintfulCommands extends DrushCommands {
    *
    *
    * @command printful:test
+   * @param string $store_id
+   *   A string machine_name of the commerce store entity to sync.
+   * @usage drush printful:test
    * @aliases pt,printful-test
    */
-  public function test() {
+  public function test($store_id) {
     try {
+
+      // Set Store info.
+      $this->printfulStore = $this->entityTypeManager->getStorage('printful_store')->load($store_id);
+      $this->pf->setConnectionInfo(['api_key' => $this->printfulStore->get('apiKey')]);
+
       $store_data = $this->pf->getStoreInfo();
       if ($store_data['code'] == 200 && isset($store_data['result'])) {
         $store = $store_data['result'];
@@ -123,12 +139,36 @@ class CommercePrintfulCommands extends DrushCommands {
   }
 
   /**
+   * @hook interact printful-test
+   */
+  public function interactTest($input, $output) {
+
+    $store_id = $input->getArgument('store_id');
+
+    // Create a list of Printful Stores.
+    $store_options = [];
+    foreach ($this->printfulStores as $id => $printful_store) {
+      $store_options[$id] = $printful_store->get('label');
+    }
+
+    if (empty($store_id)) {
+      $answer = $this->io()->choice(dt("Choose a store to test."), $store_options, NULL);
+      if ($answer == 'Cancel') {
+        throw new UserAbortException();
+      }
+      else {
+        $input->setArgument('store_id', $answer);
+      }
+    }
+  }
+
+  /**
    * Sync Printful products to Drupal Commerce products.
    *
    *
    * @command printful:sync-products
    * @param string $store
-   *   A string machine_name of the bundle to sync.
+   *   A string machine_name of the store config entity to sync.
    * @param bool $update
    *   A boolean, update existing synced products.
    * @usage drush printful:sync-products
@@ -181,6 +221,13 @@ class CommercePrintfulCommands extends DrushCommands {
    * @hook init printful-sync-products
    */
   public function initProductSync(InputInterface $input, AnnotationData $annotationData) {
+
+  }
+
+  /**
+   * @hook init printful-test
+   */
+  public function initTest(InputInterface $input, AnnotationData $annotationData) {
 
   }
 }
