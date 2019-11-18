@@ -79,59 +79,49 @@ class CommercePrintfulCommands extends DrushCommands {
    * @aliases pt,printful-test
    */
   public function test($store_id) {
+
+    // Set Printful Store.
+    $this->printfulStore = $this->printfulStores[$store_id];
+    $this->pf->setConnectionInfo(['api_key' => $this->printfulStore->get('apiKey')]);
+
     try {
-
-      // Set Store info.
-      $this->printfulStore = $this->entityTypeManager->getStorage('printful_store')->load($store_id);
-      $this->pf->setConnectionInfo(['api_key' => $this->printfulStore->get('apiKey')]);
-
       $store_data = $this->pf->getStoreInfo();
-      if ($store_data['code'] == 200 && isset($store_data['result'])) {
-        $store = $store_data['result'];
-        $this->output()->writeln(dt('<info>Store Info:</info>'));
-        $this->output()->writeln(dt('Store ID: @id', ['@id' => $store['id']]));
-        $this->output()->writeln(dt('Store name: @name', ['@name' => $store['name']]));
-        $this->output()->writeln(dt('Store type: @type', ['@type' => $store['type']]));
-        $this->output()->writeln(dt('Website: @website', ['@website' => $store['website']]));
-        $this->output()->writeln(dt('Return address: @return_address', ['@return_address' => $store['return_address']]));
-        $this->output()->writeln(dt('Billing address: @billing_address', ['@billing_address' => $store['billing_address']]));
-        $this->output()->writeln(dt('Currency: @currency', ['@currency' => $store['currency']]));
-        $this->output()->writeln(dt('Payment card: @payment_card', ['@payment_card' => $store['payment_card']]));
-        $this->output()->writeln(dt('Packing slip:'));
-        $this->output()->writeln(dt('- Email: @email', ['@email' => $store['packing_slip']['email']]));
-        $this->output()->writeln(dt('- Phone: @phone', ['@phone' => $store['packing_slip']['phone']]));
-        $this->output()->writeln(dt('- Message: @message', ['@message' => $store['packing_slip']['message']]));
-      }
-      else {
-        $this->output()->writeln(dt('<error>No Store Info found.</error>'));
-      }
+      $store = $store_data['result'];
+      $this->output()->writeln(dt('<info>Store Info:</info>'));
+      $this->output()->writeln(dt('Store ID: @id', ['@id' => $store['id']]));
+      $this->output()->writeln(dt('Store name: @name', ['@name' => $store['name']]));
+      $this->output()->writeln(dt('Store type: @type', ['@type' => $store['type']]));
+      $this->output()->writeln(dt('Website: @website', ['@website' => $store['website']]));
+      $this->output()->writeln(dt('Return address: @return_address', ['@return_address' => $store['return_address']]));
+      $this->output()->writeln(dt('Billing address: @billing_address', ['@billing_address' => $store['billing_address']]));
+      $this->output()->writeln(dt('Currency: @currency', ['@currency' => $store['currency']]));
+      $this->output()->writeln(dt('Payment card: @payment_card', ['@payment_card' => $store['payment_card']]));
+      $this->output()->writeln(dt('Packing slip:'));
+      $this->output()->writeln(dt('- Email: @email', ['@email' => $store['packing_slip']['email']]));
+      $this->output()->writeln(dt('- Phone: @phone', ['@phone' => $store['packing_slip']['phone']]));
+      $this->output()->writeln(dt('- Message: @message', ['@message' => $store['packing_slip']['message']]));
     }
     catch (PrintfulException $e) {
-      dt($e->getMessage);
+      dt('<error>' . $e->getMessage() . '</error>');
     }
     try {
       $products = $this->pf->syncProducts();
-      if ($products['code'] == 200 && isset($products['result'])) {
-        $p = $products['result'];
-        $this->output()->writeln(dt('<info>Products:</info>'));
-        $table = new Table($this->output);
-        $table->setHeaders(['Product Id', 'External ID', 'Name', 'Variants', 'Synced']);
-        $rows = [];
-        foreach($p as $key => $product) {
-          $rows[] = [
-            $product['id'],
-            $product['external_id'],
-            $product['name'],
-            $product['variants'],
-            $product['synced'],
-          ];
-        }
-        $table->addRows($rows);
-        $table->render();
+      $p = $products['result'];
+      $this->output()->writeln(dt('<info>Products:</info>'));
+      $table = new Table($this->output);
+      $table->setHeaders(['Product Id', 'External ID', 'Name', 'Variants', 'Synced']);
+      $rows = [];
+      foreach($p as $key => $product) {
+        $rows[] = [
+          $product['id'],
+          $product['external_id'],
+          $product['name'],
+          $product['variants'],
+          $product['synced'],
+        ];
       }
-      else {
-        $this->output()->writeln(dt('<error>No products found.</error>'));
-      }
+      $table->addRows($rows);
+      $table->render();
     }
     catch (PrintfulException $e) {
       dt('<error>' . $e->getMessage() . '</error>');
