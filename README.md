@@ -17,15 +17,15 @@ Basic setup
 -----------
 
 1.  Install the module as any otfer Drupal module.
-2.  Create a Printful store and add some products.
+2.  Create a Printful store and add some products on printful.com.
 3.  Create a Commerce product type with a variation type that
     has required attributes to map (colour, size) and an image field.
-4.  Make your product variation type shippable.
-5.  Add the "Printful dropshipping" shipping method.
-6.  Enable shipping for your Commerce order type, ddd shipping pane on your checkout
+4.  Add a Printful store including the API key and synchronization settings
+    on /admin/commerce/config/printful/printful_store
+5.  Make your product variation type shippable.
+6.  Add the "Printful dropshipping" shipping method.
+7.  Enable shipping for your Commerce order type, ddd shipping pane on your checkout
     flow, enable shipping for your Commerce order type.
-7.  Go to admin/commerce/config/printful/settings, enter your Printful API key,
-    input the right product synchronization settings.
 8.  Enable order synchronization with Draft export for testing.
 9.  Go to admin/commerce/config/printful/synchronization and execute synchronization
     for your product type.

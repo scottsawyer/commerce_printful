@@ -31,31 +31,24 @@ class PrintfulSyncBatch {
   /**
    * Synchronization operation callback.
    *
-   * @param string $product_bundle
-   *   Product variation bundle to synchronize.
+   * @param string $printful_store_id
+   *   Printful store to synchronize.
    * @param bool $update
    *   Should existing data be updated?
-   * @param array $context
+   * @param mixed $context
    *   Batch context.
    */
-  public static function doSync($product_bundle, $update, &$context) {
+  public static function doSync($printful_store_id, $update, &$context) {
     $integrator = \Drupal::service('commerce_printful.product_integrator');
 
     // Get config.
-    if (!isset($context['sandbox']['sync_data'])) {
-      $config = \Drupal::config('commerce_printful.settings')->get('product_sync_data');
-      if (!isset($config[$product_bundle])) {
-        static::message(static::t('Invalid product bundle ID specified.'), 'error');
-        return;
-      }
-      $context['sandbox']['sync_data'] = $config[$product_bundle];
+    if (!isset($context['sandbox']['printful_store'])) {
+      $context['sandbox']['printful_store'] = \Drupal::entityTypeManager()->getStorage('printful_store')->load($printful_store_id);
     }
-    $sync_data = &$context['sandbox']['sync_data'];
+    $store = &$context['sandbox']['printful_store'];
 
-    // Set service API key if overridden.
-    if (!empty($sync_data['api_key'])) {
-      $integrator->setConnectionInfo(['api_key' => $sync_data['api_key']]);
-    }
+    // Set service store.
+    $integrator->setPrintfulStore($store);
 
     // Initialize batch.
     if (!isset($context['sandbox']['offset'])) {
@@ -80,12 +73,10 @@ class PrintfulSyncBatch {
     }
 
     if (isset($result['result'][0])) {
-      $integrator->setConfiguration($sync_data);
       $integrator->setUpdate($update);
 
       try {
         $data = $result['result'][0];
-        $data['_bundle'] = $product_bundle;
         $product = $integrator->syncProduct($data);
         $integrator->syncProductVariants($product);
 

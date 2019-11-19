@@ -3,13 +3,13 @@
 namespace Drupal\commerce_printful\Commands;
 
 use Consolidation\AnnotatedCommand\AnnotationData;
-use Drupal\commerce_printful\Service\Printful;
-use Drupal\commerce_printful\Service\ProductIntegrator;
+use Drupal\commerce_printful\Entity\PrintfulStoreInterface;
+use Drupal\commerce_printful\Service\PrintfulInterface;
 use Drupal\commerce_printful\PrintfulSyncBatch;
 use Drupal\commerce_printful\Exception\PrintfulException;
-use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
-use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drush\Commands\DrushCommands;
+use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ChoiceQuestion;
@@ -28,91 +28,127 @@ use Symfony\Component\Console\Question\ChoiceQuestion;
 class CommercePrintfulCommands extends DrushCommands {
 
   /**
-   * Drupal\commerce_printful\Service\Printful definition.
+   * Drupal\commerce_printful\Service\PrintfulInterface definition.
    *
-   * @var \Drupal\commerce_printful\Service\Printful
+   * @var \Drupal\commerce_printful\Service\PrintfulInterface
    */
   protected $pf;
 
   /**
-   * Drupal\commerce_printful\Service\ProductIntegrator definition.
+   * Drupal\Core\Entity\EntityTypeManagerInterface definition.
    *
-   * @var \Drupal\commerce_printful\Service\ProductIntegrator
+   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
    */
-  protected $integrator;
+  protected $entityTypeManager;
 
   /**
-   * Drupal\Core\Entity\EntityTypeBundleInfo definition.
+   * Printful stores.
    *
-   * @var \Drupal\Core\Entity\EntityTypeBundleInfo
+   * @var array
    */
-  protected $bundleInfo;
+  protected $printfulStores;
 
   /**
-   * Drupal\Core\Config\ConfigFactoryInterface definition.
+   * Drupal\commerce_print\Entity\PrintfulStoreInterface definition.
    *
-   * @var \Drupal\Core\Config\ConfigFactoryInterface
+   * @var \Drupal\commerce_printful\Entity\PrintfulStoreInterface
    */
-  protected $printfulConfig;
+  protected $printfulStore;
 
   /**
    * {@inheritdoc}
    */
   public function __construct(
-    Printful $printful,
-    ProductIntegrator $product_integrator,
-    EntityTypeBundleInfoInterface $bundle_info,
-    ConfigFactoryInterface $config_factory
+    PrintfulInterface $printful,
+    EntityTypeManagerInterface $entity_type_manager
   ) {
     $this->pf = $printful;
-    $this->integrator = $product_integrator;
-    $this->bundleInfo = $bundle_info;
-    $this->printfulConfig = $config_factory;
+    $this->entityTypeManager = $entity_type_manager;
+    $this->printfulStores = $entity_type_manager->getStorage('printful_store')->loadMultiple();
   }
 
-
-    /**
-     * @return \Drupal\Core\Config\ConfigFactoryInterface
-     */
-  public function getConfig() {
-      return $this->printfulConfig;
-  }
 
   /**
    * Test the Printful API connection.
    *
    *
    * @command printful:test
+   * @param string $store_id
+   *   A string machine_name of the commerce store entity to sync.
+   * @usage drush printful:test
    * @aliases pt,printful-test
    */
-  public function test() {
+  public function test($store_id) {
+
+    // Set Printful Store.
+    $this->printfulStore = $this->printfulStores[$store_id];
+    $this->pf->setConnectionInfo(['api_key' => $this->printfulStore->get('apiKey')]);
+
     try {
       $store_data = $this->pf->getStoreInfo();
-      if ($store_data['code'] == 200 && isset($store_data['result'])) {
-        $d = print_r($store_data['result'], TRUE);
-        $this->output()->writeln(dt('Store Info:'));
-        $this->output()->writeln($d);
-      }
-      else {
-        $this->output()->writeln(dt('No Store Info found.'));
-      }
+      $store = $store_data['result'];
+      $this->output()->writeln(dt('<info>Store Info:</info>'));
+      $this->output()->writeln(dt('Store ID: @id', ['@id' => $store['id']]));
+      $this->output()->writeln(dt('Store name: @name', ['@name' => $store['name']]));
+      $this->output()->writeln(dt('Store type: @type', ['@type' => $store['type']]));
+      $this->output()->writeln(dt('Website: @website', ['@website' => $store['website']]));
+      $this->output()->writeln(dt('Return address: @return_address', ['@return_address' => $store['return_address']]));
+      $this->output()->writeln(dt('Billing address: @billing_address', ['@billing_address' => $store['billing_address']]));
+      $this->output()->writeln(dt('Currency: @currency', ['@currency' => $store['currency']]));
+      $this->output()->writeln(dt('Payment card: @payment_card', ['@payment_card' => $store['payment_card']]));
+      $this->output()->writeln(dt('Packing slip:'));
+      $this->output()->writeln(dt('- Email: @email', ['@email' => $store['packing_slip']['email']]));
+      $this->output()->writeln(dt('- Phone: @phone', ['@phone' => $store['packing_slip']['phone']]));
+      $this->output()->writeln(dt('- Message: @message', ['@message' => $store['packing_slip']['message']]));
     }
     catch (PrintfulException $e) {
-      dt($e->getMessage);
+      dt('<error>' . $e->getMessage() . '</error>');
     }
     try {
       $products = $this->pf->syncProducts();
-      if ($products['code'] == 200 && isset($products['result'])) {
-        $p = print_r($products['result'], TRUE);
-        $this->output()->writeln(dt('Products:'));
-        $this->output()->writeln($p);
+      $p = $products['result'];
+      $this->output()->writeln(dt('<info>Products:</info>'));
+      $table = new Table($this->output);
+      $table->setHeaders(['Product Id', 'External ID', 'Name', 'Variants', 'Synced']);
+      $rows = [];
+      foreach($p as $key => $product) {
+        $rows[] = [
+          $product['id'],
+          $product['external_id'],
+          $product['name'],
+          $product['variants'],
+          $product['synced'],
+        ];
       }
-      else {
-        $this->output()->writeln(dt('No products found.'));
-      }
+      $table->addRows($rows);
+      $table->render();
     }
     catch (PrintfulException $e) {
-      dt($e->getMessage);
+      dt('<error>' . $e->getMessage() . '</error>');
+    }
+  }
+
+  /**
+   * @hook interact printful-test
+   */
+  public function interactTest($input, $output) {
+
+    $store_id = $input->getArgument('store_id');
+
+    // Create a list of Printful Stores.
+    $store_options = [];
+    foreach ($this->printfulStores as $id => $printful_store) {
+      $store_options[$id] = $printful_store->get('label');
+    }
+
+    if (empty($store_id)) {
+      $answer = $this->io()->choice(dt("Choose a store to test."), $store_options, NULL);
+      if ($answer == 'Cancel') {
+        throw new UserAbortException();
+      }
+      else {
+        $input->setArgument('store_id', $answer);
+      }
     }
   }
 
@@ -121,19 +157,23 @@ class CommercePrintfulCommands extends DrushCommands {
    *
    *
    * @command printful:sync-products
-   * @param $bundle A string machine_name of the bundle to sync.
+   * @param string $store
+   *   A string machine_name of the store config entity to sync.
+   * @param bool $update
+   *   A boolean, update existing synced products.
    * @usage drush printful:sync-products
    * @aliases psp,printful-sync-products
    */
-  public function syncProducts($bundle, $update) {
+  public function syncProducts($store, $update) {
 
     $batch = PrintfulSyncBatch::getBatch([
-      'product_bundle' => $bundle,
+      'printful_store_id' => $store,
       'update' => $update,
     ]);
     batch_set($batch);
-
+    $this->output()->writeln(dt('<info>Starting sync...</info>'));
     drush_backend_batch_process();
+
   }
 
   /**
@@ -141,24 +181,22 @@ class CommercePrintfulCommands extends DrushCommands {
    */
   public function interactSyncProducts($input, $output) {
 
-    $config = $this->getConfig()->get('commerce_printful.settings');
-    $bundle = $input->getArgument('bundle');
+    $store = $input->getArgument('store');
     $update = $input->getArgument('update');
 
-    // Create list of bundles.
-    $product_bundles = $this->bundleInfo->getBundleInfo('commerce_product');
-    $product_options = [];
-    foreach ($config->get('product_sync_data') as $bundle_id => $data) {
-      $product_options[$bundle_id] = $bundle_id;
+    // Create a list of Printful Stores.
+    $store_options = [];
+    foreach ($this->printfulStores as $store_id => $printful_store) {
+      $store_options[$store_id] = $printful_store->get('label');
     }
-    if (empty($bundle)) {
-      $choices = array_combine($product_options, $product_options);
-      $return = $this->io()->choice(dt("Choose a bundle to sync"), $choices, NULL);
-      if ($return == 'Cancel') {
+
+    if (empty($store)) {
+      $answer = $this->io()->choice(dt("Choose a store to sync."), $store_options, NULL);
+      if ($answer == 'Cancel') {
         throw new UserAbortException();
-      } 
+      }
       else {
-        $input->setArgument('bundle', $return);
+        $input->setArgument('store', $answer);
       }
     }
 
@@ -173,6 +211,13 @@ class CommercePrintfulCommands extends DrushCommands {
    * @hook init printful-sync-products
    */
   public function initProductSync(InputInterface $input, AnnotationData $annotationData) {
+
+  }
+
+  /**
+   * @hook init printful-test
+   */
+  public function initTest(InputInterface $input, AnnotationData $annotationData) {
 
   }
 }

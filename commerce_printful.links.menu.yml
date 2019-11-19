@@ -5,10 +5,17 @@ commerce_printful.configuration:
   weight: -6
 
 commerce_printful.printful_config:
-  title: 'Printful configuration'
+  title: 'General configuration'
   description: 'Configure Commerce Printful settings.'
   parent: 'commerce_printful.configuration'
   route_name: commerce_printful.printful_config
+  weight: 8
+
+entity.printful_store.collection:
+  title: 'Printful stores'
+  route_name: entity.printful_store.collection
+  description: 'Setup Printful stores'
+  parent: commerce_printful.configuration
   weight: 9
 
 commerce_printful.synchronization:

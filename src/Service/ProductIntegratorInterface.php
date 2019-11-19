@@ -2,6 +2,7 @@
 
 namespace Drupal\commerce_printful\Service;
 
+use Drupal\commerce_printful\Entity\PrintfulStoreInterface;
 use Drupal\commerce_product\Entity\ProductInterface;
 
 /**
@@ -34,12 +35,12 @@ interface ProductIntegratorInterface {
   /**
    * Sets configuration of the integrator.
    *
-   * @param array $configuration
-   *   Array of configuration for a product type.
+   * @param \Drupal\commerce_printful\Entity\PrintfulStoreInterface $printful_store
+   *   Printful store config entity.
    *
    * @see commerce_printful.schema.yml
    */
-  public function setConfiguration(array $configuration);
+  public function setPrintfulStore(PrintfulStoreInterface $printful_store);
 
   /**
    * Sets the update parameter.

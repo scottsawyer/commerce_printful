@@ -4,6 +4,7 @@ namespace Drupal\commerce_printful\Service;
 
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\File\FileSystemInterface;
+use Drupal\commerce_printful\Entity\PrintfulStoreInterface;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\commerce_printful\Exception\PrintfulException;
 use Drupal\commerce_price\Price;
@@ -43,11 +44,11 @@ class ProductIntegrator implements ProductIntegratorInterface {
   protected $store;
 
   /**
-   * Integration configuration.
+   * Printful store config entity.
    *
-   * @var array
+   * @var \Drupal\commerce_printful\Entity\PrintfulStoreInterface
    */
-  protected $configuration;
+  protected $printfulStore;
 
   /**
    * Should existing content be updated?
@@ -93,11 +94,10 @@ class ProductIntegrator implements ProductIntegratorInterface {
   /**
    * {@inheritdoc}
    */
-  public function setConfiguration(array $configuration) {
-    $this->configuration = $configuration;
-    if (isset($configuration['commerce_store_id'])) {
-      $this->setStore($configuration['commerce_store_id']);
-    }
+  public function setPrintfulStore(PrintfulStoreInterface $printful_store) {
+    $this->printfulStore = $printful_store;
+    $this->setStore($printful_store->get('commerceStoreId'));
+    $this->setConnectionInfo(['api_key' => $printful_store->get('apiKey')]);
   }
 
   /**
@@ -124,7 +124,7 @@ class ProductIntegrator implements ProductIntegratorInterface {
     if (empty($products)) {
       // Create the new product.
       $product = $productStorage->create([
-        'type' => $data['_bundle'],
+        'type' => $this->printfulStore->get('productBundle'),
         'title' => $data['name'],
         'printful_reference' => $data['external_id'],
         'stores' => $this->store,
@@ -221,7 +221,7 @@ class ProductIntegrator implements ProductIntegratorInterface {
     }
 
     // Synchronize mapped variation fields.
-    foreach ($this->configuration['attribute_mapping'] as $attribute => $field_name) {
+    foreach ($this->printfulStore->get('attributeMapping') as $attribute => $field_name) {
       // Image type field.
       if ($attribute === 'image') {
         foreach ($printful_variant['files'] as $file_data) {
