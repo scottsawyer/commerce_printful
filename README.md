@@ -12,6 +12,8 @@ The module provides the following:
 * integration of orders (when an order is fully paid in the Commerce store,
   it's shipments that use the printful_shipping method - usually one - are
   being sent to Printful).
+* Printful "Package shipped" webhook integration: shipments get automatic status update
+  and get shipping data including a tracking code.
 
 Basic setup
 -----------
@@ -21,7 +23,7 @@ Basic setup
 3.  Create a Commerce product type with a variation type that
     has required attributes to map (colour, size) and an image field.
 4.  Add a Printful store including the API key and synchronization settings
-    on /admin/commerce/config/printful/printful_store
+    on /admin/commerce/config/printful/printful_store.
 5.  Make your product variation type shippable.
 6.  Add the "Printful dropshipping" shipping method.
 7.  Enable shipping for your Commerce order type, ddd shipping pane on your checkout
