@@ -68,45 +68,47 @@ class OrderIntegrator implements OrderIntegratorInterface {
    * {@inheritdoc}
    */
   public function createPrintfulOrder(OrderInterface $order) {
-    $request = [
-      'update_existing' => TRUE,
-    ];
+    if (!empty($order->shipments)) {
+      $request = [
+        'update_existing' => TRUE,
+      ];
 
-    // Get all the shipments, if the shipping method is our printful_shipping,
-    // proceed further. This way we'll be able to create Printful order for each shipment
-    // if ever needed.
-    foreach ($order->shipments as $shipmentItem) {
-      $shipment = $shipmentItem->entity;
+      // Get all the shipments, if the shipping method is our printful_shipping,
+      // proceed further. This way we'll be able to create Printful order for each shipment
+      // if ever needed.
+      foreach ($order->shipments as $shipmentItem) {
+        $shipment = $shipmentItem->entity;
 
-      if ($shipment->getShippingMethod()->getPlugin()->getPluginId() === 'printful_shipping') {
+        if ($shipment->getShippingMethod()->getPlugin()->getPluginId() === 'printful_shipping') {
 
-        $shipment_request_data = $this->getRequestData($shipment, TRUE);
-        if (!empty($shipment_request_data)) {
-          // Set API key if not default.
-          // @see Drupal\commerce_printful\Plugin\Commerce\ShippingMethod\PrintfulShipping::calculateRates().
-          if (!empty($shipment_request_data['_printful_store'])) {
-            $this->setPrintfulStore($shipment_request_data['_printful_store']);
-            unset($shipment_request_data['_printful_store']);
-          }
+          $shipment_request_data = $this->getRequestData($shipment, TRUE);
+          if (!empty($shipment_request_data)) {
+            // Set API key if not default.
+            // @see Drupal\commerce_printful\Plugin\Commerce\ShippingMethod\PrintfulShipping::calculateRates().
+            if (!empty($shipment_request_data['_printful_store'])) {
+              $this->setPrintfulStore($shipment_request_data['_printful_store']);
+              unset($shipment_request_data['_printful_store']);
+            }
 
-          $request['confirm'] = empty($this->printfulStore->get('draftOrders'));
+            $request['confirm'] = empty($this->printfulStore->get('draftOrders'));
 
-          $request['body'] = $shipment_request_data;
-          $request['body']['shipping'] = $shipment->getShippingService();
-          $request['body']['external_id'] = $shipment->id();
+            $request['body'] = $shipment_request_data;
+            $request['body']['shipping'] = $shipment->getShippingService();
+            $request['body']['external_id'] = $shipment->id();
 
-          try {
-            $result = $this->pf->createOrder($request);
-            $this->logger->notice($this->t('Order (@order_id) shipment @shipment_id integrated. Printful ID: @printful_id', [
-              '@order_id' => $order->id(),
-              '@shipment_id' => $shipment->id(),
-              '@printful_id' => $result['result']['id'],
-            ]));
-          }
-          catch (PrintfulException $e) {
-            $this->logger->error($this->t('Order integration error: @error', [
-              '@error' => $e->getFullInfo(),
-            ]));
+            try {
+              $result = $this->pf->createOrder($request);
+              $this->logger->notice($this->t('Order (@order_id) shipment @shipment_id integrated. Printful ID: @printful_id', [
+                '@order_id' => $order->id(),
+                '@shipment_id' => $shipment->id(),
+                '@printful_id' => $result['result']['id'],
+              ]));
+            }
+            catch (PrintfulException $e) {
+              $this->logger->error($this->t('Order integration error: @error', [
+                '@error' => $e->getFullInfo(),
+              ]));
+            }
           }
         }
       }
