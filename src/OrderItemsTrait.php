@@ -55,6 +55,9 @@ trait OrderItemsTrait {
       foreach ($shipment->getItems() as $shipmentItem) {
         $orderItem = $order_items[$shipmentItem->getOrderItemId()];
         $purchasedEntity = $orderItem->getPurchasedEntity();
+        if (!$purchasedEntity) {
+          continue;
+        }
 
         // Add product bundle information to optionally set API key in the parent method.
         // TODO: maybe a better way to structure this, with the current data structure
@@ -83,7 +86,7 @@ trait OrderItemsTrait {
             if ($totalPrice->getCurrencyCode() !== $pf_currency) {
               $totalPrice = CurrencyHelper::priceConversion($totalPrice, $pf_currency);
             }
-            $item['name'] = $purchasedEntity->label();
+            $item['name'] = $orderItem->label();
             $item['retail_price'] = (string) $totalPrice;
             $item['sku'] = $purchasedEntity->getSku();
           }
