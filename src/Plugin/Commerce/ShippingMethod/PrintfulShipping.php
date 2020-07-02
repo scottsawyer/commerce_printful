@@ -13,6 +13,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_shipping\Entity\ShipmentInterface;
 use Drupal\commerce_shipping\PackageTypeManagerInterface;
+use Drupal\state_machine\WorkflowManagerInterface;
 use Drupal\commerce_shipping\ShippingRate;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\commerce_printful\Exception\PrintfulException;
@@ -64,6 +65,8 @@ class PrintfulShipping extends ShippingMethodBase {
    *   The plugin implementation definition.
    * @param \Drupal\commerce_shipping\PackageTypeManagerInterface $package_type_manager
    *   Package type manager.
+   * @param \Drupal\state_machine\WorkflowManagerInterface $workflow_manager
+   *   The workflow manager.
    * @param \Drupal\commerce_printful\Service\PrintfulInterface $pf
    *   The package type manager.
    * @param \Psr\Log\LoggerInterface $logger
@@ -76,11 +79,12 @@ class PrintfulShipping extends ShippingMethodBase {
     $plugin_id,
     $plugin_definition,
     PackageTypeManagerInterface $package_type_manager,
+    WorkflowManagerInterface $workflow_manager,
     PrintfulInterface $pf,
     LoggerInterface $logger,
     ImmutableConfig $config
   ) {
-    parent::__construct($configuration, $plugin_id, $plugin_definition, $package_type_manager);
+    parent::__construct($configuration, $plugin_id, $plugin_definition, $package_type_manager, $workflow_manager);
 
     $this->pf = $pf;
     $this->logger = $logger;
@@ -96,6 +100,7 @@ class PrintfulShipping extends ShippingMethodBase {
       $plugin_id,
       $plugin_definition,
       $container->get('plugin.manager.commerce_package_type'),
+      $container->get('plugin.manager.workflow'),
       $container->get('commerce_printful.printful'),
       $container->get('logger.factory')->get('commerce_printful'),
       $container->get('config.factory')->get('commerce_printful.settings')
@@ -109,15 +114,6 @@ class PrintfulShipping extends ShippingMethodBase {
     $form = $this->currencyBuildConfigurationForm($form, $form_state);
     unset($form['default_package_type']);
     return $form;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function submitConfigurationForm(array &$form, FormStateInterface $form_state) {
-    if (!$form_state->getErrors()) {
-      $values = $form_state->getValue($form['#parents']);
-    }
   }
 
   /**

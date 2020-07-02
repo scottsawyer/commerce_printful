@@ -87,12 +87,10 @@ function drush_commerce_printful_printful_sync_products() {
       $variants = $pf->syncProducts($sync_product['id']);
 
       // drush_print(print_r($variants, TRUE));
-
       // Loop over each variant and check for a commerce product variation.
       foreach ($variants['result']['sync_variants'] as $variant) {
 
         // drush_print_r($variant);
-
         $sku = $variant['product']['product_id'] . '-' . $variant['product']['variant_id'];
         drush_print('Checking for SKU: ' . $sku);
         $properties = [
@@ -107,7 +105,6 @@ function drush_commerce_printful_printful_sync_products() {
           // Get variant attributes.
           $variant_info = $pf->productsVariant($variant['variant_id']);
           // drush_print_r($variant_info);
-
           $variant_attrs = [
             'size' => $variant_info['result']['variant']['size'],
             'color' => $variant_info['result']['variant']['color'],
@@ -203,7 +200,6 @@ function drush_commerce_printful_printful_sync_products() {
           ];
 
           // drush_print_r($variation_properties);
-
           $variation = ProductVariation::create($variation_properties);
           $variation->save();
           $product->addVariation($variation);

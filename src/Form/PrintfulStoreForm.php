@@ -3,7 +3,6 @@
 namespace Drupal\commerce_printful\Form;
 
 use Drupal\Core\Entity\EntityForm;
-use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\commerce_printful\Service\PrintfulInterface;
@@ -54,8 +53,6 @@ class PrintfulStoreForm extends EntityForm {
   /**
    * Creates a new PrintfulStoreForm instance.
    *
-   * @param \Drupal\Core\Entity\EntityTypeBundleInfoInterface $bundleInfo
-   *   The bundle info service.
    * @param \Drupal\Core\Entity\EntityFieldManagerInterface $entityFieldManager
    *   The entity field manager.
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entityTypeManager
@@ -66,7 +63,6 @@ class PrintfulStoreForm extends EntityForm {
    *   The current request.
    */
   public function __construct(
-    EntityTypeBundleInfoInterface $bundleInfo,
     EntityFieldManagerInterface $entityFieldManager,
     EntityTypeManagerInterface $entityTypeManager,
     PrintfulInterface $pf,
@@ -91,7 +87,6 @@ class PrintfulStoreForm extends EntityForm {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('entity_type.bundle.info'),
       $container->get('entity_field.manager'),
       $container->get('entity_type.manager'),
       $container->get('commerce_printful.printful'),
@@ -294,7 +289,6 @@ class PrintfulStoreForm extends EntityForm {
     $api_key = $form_state->getValue('apiKey');
 
     // Validate API key and base_url if changed.
-    $config = $this->config('commerce_printful.settings');
     if ($api_key !== $this->entity->get('apiKey')) {
       $this->pf->setConnectionInfo([
         'api_key' => $api_key,
@@ -345,7 +339,7 @@ class PrintfulStoreForm extends EntityForm {
       if ($update_webhooks) {
         $this->pf->unsetWebhooks();
         if (!empty($event_types)) {
-          $response = $this->pf->setWebhooks([
+          $this->pf->setWebhooks([
             'url' => $this->request->getSchemeAndHttpHost() . '/commerce-printful/webhooks',
             'types' => $event_types,
           ]);

@@ -41,7 +41,7 @@ class PrintfulController extends ControllerBase {
     }
 
     $method = self::METHDS[$data['type']];
-    $result = $this->{$method}($data);
+    $this->{$method}($data);
 
     return new Response('OK', Response::HTTP_OK);
   }

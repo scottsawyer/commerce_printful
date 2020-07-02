@@ -2,8 +2,10 @@
 
 namespace Drupal\commerce_printful\Service;
 
+use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\File\FileSystemInterface;
+use Drupal\Core\Logger\LoggerChannelFactoryInterface;
 use Drupal\commerce_printful\Entity\PrintfulStoreInterface;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\commerce_printful\Exception\PrintfulException;
@@ -14,6 +16,8 @@ use Drupal\commerce_product\Entity\ProductVariationInterface;
  * Printful product integration service implementation.
  */
 class ProductIntegrator implements ProductIntegratorInterface {
+
+  use StringTranslationTrait;
 
   /**
    * The printful API service.
@@ -35,6 +39,13 @@ class ProductIntegrator implements ProductIntegratorInterface {
    * @var \Drupal\Core\File\FileSystemInterface
    */
   protected $fileSystem;
+
+  /**
+   * Logger for this service.
+   *
+   * @var \Psr\Log\LoggerInterface
+   */
+  protected $logger;
 
   /**
    * Commerce store entity.
@@ -66,15 +77,19 @@ class ProductIntegrator implements ProductIntegratorInterface {
    *   The Entity Type Manager.
    * @param \Drupal\Core\File\FileSystemInterface $fileSystem
    *   The file system service.
+   * @param \Drupal\Core\Logger\LoggerChannelFactoryInterface $logger_factory
+   *   The logger factory.
    */
   public function __construct(
     PrintfulInterface $pf,
     EntityTypeManagerInterface $entityTypeManager,
-    FileSystemInterface $fileSystem
+    FileSystemInterface $fileSystem,
+    LoggerChannelFactoryInterface $logger_factory
   ) {
     $this->pf = $pf;
     $this->entityTypeManager = $entityTypeManager;
     $this->fileSystem = $fileSystem;
+    $this->logger = $logger_factory->get('commerce_printful');
   }
 
   /**
@@ -190,7 +205,7 @@ class ProductIntegrator implements ProductIntegratorInterface {
       'printful_reference' => $printful_variant['external_id'],
     ]);
 
-    $sku = 'PF-' . $printful_variant['product']['product_id'] . '-' . $printful_variant['product']['variant_id'];
+    $sku = 'PF-' . $printful_variant['sku'];
     if (empty($product_variations)) {
       // Try to get by SKU.
       $product_variations = $variationStorage->loadByProperties([
@@ -224,12 +239,20 @@ class ProductIntegrator implements ProductIntegratorInterface {
     foreach ($this->printfulStore->get('attributeMapping') as $attribute => $field_name) {
       // Image type field.
       if ($attribute === 'image') {
+        $file_data = [];
         foreach ($printful_variant['files'] as $file_data) {
           if ($file_data['type'] === 'preview') {
             break;
           }
         }
-        $this->syncImage($variation, $file_data, $field_name);
+        if (!empty($file_data)) {
+          $this->syncImage($variation, $file_data, $field_name);
+        }
+        else {
+          $this->logger->warning($this->t('Image data missing on variant: @variant', [
+            '@variant' => json_encode($printful_variant),
+          ]));
+        }
       }
 
       // Attribute field.

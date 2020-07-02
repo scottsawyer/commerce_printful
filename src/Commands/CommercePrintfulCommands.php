@@ -67,14 +67,14 @@ class CommercePrintfulCommands extends DrushCommands {
     $this->printfulStores = $entity_type_manager->getStorage('printful_store')->loadMultiple();
   }
 
-
   /**
    * Test the Printful API connection.
    *
-   *
-   * @command printful:test
    * @param string $store_id
    *   A string machine_name of the commerce store entity to sync.
+   *
+   * @command printful:test
+   *
    * @usage drush printful:test
    * @aliases pt,printful-test
    */
@@ -109,9 +109,15 @@ class CommercePrintfulCommands extends DrushCommands {
       $p = $products['result'];
       $this->output()->writeln(dt('<info>Products:</info>'));
       $table = new Table($this->output);
-      $table->setHeaders(['Product Id', 'External ID', 'Name', 'Variants', 'Synced']);
+      $table->setHeaders([
+        'Product Id',
+        'External ID',
+        'Name',
+        'Variants',
+        'Synced',
+      ]);
       $rows = [];
-      foreach($p as $key => $product) {
+      foreach ($p as $product) {
         $rows[] = [
           $product['id'],
           $product['external_id'],
@@ -129,6 +135,8 @@ class CommercePrintfulCommands extends DrushCommands {
   }
 
   /**
+   * Some function.
+   *
    * @hook interact printful-test
    */
   public function interactTest($input, $output) {
@@ -155,12 +163,12 @@ class CommercePrintfulCommands extends DrushCommands {
   /**
    * Sync Printful products to Drupal Commerce products.
    *
-   *
-   * @command printful:sync-products
    * @param string $store
    *   A string machine_name of the store config entity to sync.
    * @param bool $update
    *   A boolean, update existing synced products.
+   *
+   * @command printful:sync-products
    * @usage drush printful:sync-products
    * @aliases psp,printful-sync-products
    */
@@ -177,6 +185,8 @@ class CommercePrintfulCommands extends DrushCommands {
   }
 
   /**
+   * Some func.
+   *
    * @hook interact printful-sync-products
    */
   public function interactSyncProducts($input, $output) {
@@ -202,12 +212,14 @@ class CommercePrintfulCommands extends DrushCommands {
 
     // Update or just new.
     if (empty($update)) {
-      $return = $this->io()->confirm('Update existing products?', true);
+      $return = $this->io()->confirm('Update existing products?', TRUE);
       $input->setArgument('update', $return);
     }
   }
 
   /**
+   * Some func.
+   *
    * @hook init printful-sync-products
    */
   public function initProductSync(InputInterface $input, AnnotationData $annotationData) {
@@ -215,9 +227,12 @@ class CommercePrintfulCommands extends DrushCommands {
   }
 
   /**
+   * Some func.
+   *
    * @hook init printful-test
    */
   public function initTest(InputInterface $input, AnnotationData $annotationData) {
 
   }
+
 }

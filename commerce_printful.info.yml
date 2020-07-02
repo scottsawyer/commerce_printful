@@ -1,8 +1,9 @@
 name: 'Commerce Printful'
 type: module
 description: 'Intergrates Drupal Commerce with Printful.'
-core: 8.x
 package: 'Commerce (contrib)'
+core_version_requirement: ^8.8
+
 dependencies:
   - commerce:commerce
   - commerce:commerce_price
