@@ -4,6 +4,7 @@ namespace Drupal\commerce_printful;
 
 use Drupal\commerce_shipping\Entity\ShipmentInterface;
 use Drupal\commerce_currency_resolver\CurrencyHelper;
+use Drupal\commerce_printful\Entity\PrintfulStoreInterface;
 
 /**
  * Common Order data fetvching functionality.
@@ -39,8 +40,6 @@ trait OrderItemsTrait {
       if ($more) {
         $output['recipient']['name'] = $address['given_name'] . ' ' . $address['family_name'];
         $output['recipient']['company'] = $address['organization'];
-        $store_info = $this->pf->getStoreInfo();
-        $pf_currency = $store_info['result']['currency'];
       }
 
       // Without the recipient we have nothing to do so the rest of the logic
@@ -66,6 +65,9 @@ trait OrderItemsTrait {
           $product_bundle = $purchasedEntity->getProduct()->bundle();
           foreach ($printful_stores as $printful_store) {
             if ($printful_store->get('productBundle') == $product_bundle) {
+              $this->setPrintfulStore($printful_store);
+              $store_info = $this->pf->getStoreInfo();
+              $pf_currency = $store_info['result']['currency'];
               $output['_printful_store'] = $printful_store;
               break;
             }
@@ -97,6 +99,16 @@ trait OrderItemsTrait {
     }
 
     return $output;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setPrintfulStore(PrintfulStoreInterface $printful_store) {
+    // Set the API key.
+    $this->pf->setConnectionInfo([
+      'api_key' => $printful_store->get('apiKey'),
+    ]);
   }
 
 }
