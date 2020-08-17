@@ -293,7 +293,7 @@ class ProductIntegrator implements ProductIntegratorInterface {
 
         $destination = $destination_dir . '/' . $file_data['filename'];
 
-        $file = file_save_data(file_get_contents($file_data['preview_url']), $destination, FILE_EXISTS_RENAME);
+        $file = file_save_data(file_get_contents($file_data['preview_url']), $destination, FileSystemInterface::EXISTS_RENAME);
         if (!$file) {
           throw new PrintfulException('Variant image save problem.');
         }

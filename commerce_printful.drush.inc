@@ -1,5 +1,6 @@
 <?php
 
+use Drupal\Core\File\FileSystemInterface;
 /**
  * @file
  * Provides the Commerce Printful drush commands.
@@ -152,7 +153,7 @@ function drush_commerce_printful_printful_sync_products() {
               $file_contents = file_get_contents($url);
               $file = [];
               if ($file_contents) {
-                $file = file_save_data($file_contents, 'public://images/' . basename($url), FILE_EXISTS_REPLACE);
+                $file = file_save_data($file_contents, 'public://images/' . basename($url), FileSystemInterface::EXISTS_REPLACE);
                 $file->status = FILE_STATUS_PERMANENT;
                 $file->save();
               }
