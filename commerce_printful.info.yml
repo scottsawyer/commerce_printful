@@ -10,5 +10,5 @@ dependencies:
   - commerce:commerce_product
   - commerce:commerce_order
   - commerce:commerce_tax
-  - commerce_currency_resolver:commerce_currency_resolver
+  - commerce_currency_resolver:commerce_currency_resolver (>= 8.x-1.53)
   - commerce_shipping:commerce_shipping

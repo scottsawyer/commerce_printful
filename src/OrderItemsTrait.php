@@ -3,7 +3,7 @@
 namespace Drupal\commerce_printful;
 
 use Drupal\commerce_shipping\Entity\ShipmentInterface;
-use Drupal\commerce_currency_resolver\CurrencyHelper;
+use Drupal\commerce_currency_resolver\PriceExchangerCalculator;
 use Drupal\commerce_printful\Entity\PrintfulStoreInterface;
 
 /**
@@ -52,6 +52,10 @@ trait OrderItemsTrait {
       }
 
       foreach ($shipment->getItems() as $shipmentItem) {
+        // Check if the $shipmentItem is in the $order_items.
+        if (!isset($order_items[$shipmentItem->getOrderItemId()])) {
+          continue;
+        }
         $orderItem = $order_items[$shipmentItem->getOrderItemId()];
         $purchasedEntity = $orderItem->getPurchasedEntity();
         if (!$purchasedEntity) {
@@ -86,7 +90,7 @@ trait OrderItemsTrait {
 
             // Convert currency to Printful default if required.
             if ($totalPrice->getCurrencyCode() !== $pf_currency) {
-              $totalPrice = CurrencyHelper::priceConversion($totalPrice, $pf_currency);
+              $totalPrice = $this->priceExchangerCalculator->priceConversion($totalPrice, $pf_currency);
             }
             $item['name'] = $orderItem->label();
             $item['retail_price'] = (string) $totalPrice;

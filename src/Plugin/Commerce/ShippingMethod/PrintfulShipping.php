@@ -4,6 +4,7 @@ namespace Drupal\commerce_printful\Plugin\Commerce\ShippingMethod;
 
 use Drupal\commerce_shipping\Plugin\Commerce\ShippingMethod\ShippingMethodBase;
 use Drupal\commerce_currency_resolver\Plugin\Commerce\CommerceCurrencyResolverAmountTrait;
+use Drupal\commerce_currency_resolver\PriceExchangerCalculator;
 use Drupal\commerce_printful\OrderItemsTrait;
 use Drupal\commerce_printful\Service\PrintfulInterface;
 use Psr\Log\LoggerInterface;
@@ -55,6 +56,13 @@ class PrintfulShipping extends ShippingMethodBase {
   protected $integrationSettings;
 
   /**
+   * The Price Exchanger Calculator.
+   *
+   * @var \Drupal\commerce_currency_resolver\PriceExchangerCalculator
+   */
+  protected $priceExchangerCalculator;
+
+  /**
    * Constructor.
    *
    * @param array $configuration
@@ -73,6 +81,8 @@ class PrintfulShipping extends ShippingMethodBase {
    *   The logger factory service.
    * @param \Drupal\Core\Config\ImmutableConfig $config
    *   Config for this module.
+   * @param \Drupal\commerce_currency_resolver\PriceExchangerCalculator $price_exchanger_calculator
+   *   The Price exchange calculator service.
    */
   public function __construct(
     array $configuration,
@@ -82,13 +92,15 @@ class PrintfulShipping extends ShippingMethodBase {
     WorkflowManagerInterface $workflow_manager,
     PrintfulInterface $pf,
     LoggerInterface $logger,
-    ImmutableConfig $config
+    ImmutableConfig $config,
+    PriceExchangerCalculator $price_exchanger_calculator
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition, $package_type_manager, $workflow_manager);
 
     $this->pf = $pf;
     $this->logger = $logger;
     $this->integrationSettings = $config->get('product_sync_data');
+    $this->priceExchangerCalculator = $price_exchanger_calculator;
   }
 
   /**
@@ -103,7 +115,8 @@ class PrintfulShipping extends ShippingMethodBase {
       $container->get('plugin.manager.workflow'),
       $container->get('commerce_printful.printful'),
       $container->get('logger.factory')->get('commerce_printful'),
-      $container->get('config.factory')->get('commerce_printful.settings')
+      $container->get('config.factory')->get('commerce_printful.settings'),
+      $container->get('commerce_currency_resolver.calculator')
     );
   }
 
@@ -152,12 +165,16 @@ class PrintfulShipping extends ShippingMethodBase {
           if ($this->shouldCurrencyRefresh($this->currentCurrency())) {
             // If current currency does not match to shipment code.
             if ($this->currentCurrency() !== $price->getCurrencyCode()) {
-              $price = $this->getPrice($price, $this->currentCurrency());
+              $price = $this->getPrice($price);
             }
           }
 
           $service = new ShippingService($printful_shipping_option['id'], $printful_shipping_option['name']);
-          $rates[$printful_shipping_option['rate']] = new ShippingRate($printful_shipping_option['id'], $service, $price);
+          $rates[$printful_shipping_option['rate']] = new ShippingRate([
+            'shipping_method_id' => $this->parentEntity->id(),
+            'service' => $service,
+            'amount' => $price,
+          ]);
         }
         // Sort by price ASC.
         ksort($rates);
@@ -173,16 +190,6 @@ class PrintfulShipping extends ShippingMethodBase {
     }
 
     return $rates;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function selectRate(ShipmentInterface $shipment, ShippingRate $rate) {
-    // Plugins can override this method to store additional information
-    // on the shipment when the rate is selected (for example, the rate ID).
-    $shipment->setShippingService($rate->getService()->getId());
-    $shipment->setAmount($rate->getAmount());
   }
 
 }
