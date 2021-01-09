@@ -1,0 +1,71 @@
+diff --git a/src/Service/Printful.php b/src/Service/Printful.php
+index 1749e2e..2366906 100644
+--- a/src/Service/Printful.php
++++ b/src/Service/Printful.php
+@@ -25,6 +25,9 @@ class Printful implements PrintfulInterface {
+     'productsVariant' => [
+       'path' => 'products/variant',
+     ],
++    'products' => [
++      'path' => 'products',
++    ],
+     'shippingRates' => [
+       'path' => 'shipping/rates',
+       'method' => 'POST',
+diff --git a/src/Service/ProductIntegrator.php b/src/Service/ProductIntegrator.php
+index 97400fc..54f8796 100644
+--- a/src/Service/ProductIntegrator.php
++++ b/src/Service/ProductIntegrator.php
+@@ -174,11 +174,19 @@ class ProductIntegrator implements ProductIntegratorInterface {
+ 
+     // Get product data including variants.
+     $result = $this->pf->syncProducts('@' . $printful_id);
++    $sync_variants = $result['result']['sync_variants'];
++    $printful_product_id = $sync_variants[0]['product']['product_id'];
++    // Get product variants.
++    $variant_data = $this->pf->products($printful_product_id);
+ 
+     $variations = [];
+     $variation_bundle = $this->entityTypeManager->getStorage('commerce_product_type')->load($product->bundle())->getVariationTypeId();
+-    foreach ($result['result']['sync_variants'] as $printful_variant) {
+-      $variation = $this->syncProductVariant($printful_variant, $product, $variation_bundle);
++    foreach ($sync_variants as $printful_variant) {
++      // Get required params from $variant_data.
++      $variant_params = array_filter($variant_data['result']['variants'], function ($variant) use ($printful_variant) {
++        return ($variant['id'] == $printful_variant['product']['variant_id']);
++      });
++      $variation = $this->syncProductVariant($printful_variant, $variant_params, $product, $variation_bundle);
+       $variations[$variation->id()] = $variation;
+     }
+     $product->setVariations($variations);
+@@ -196,10 +204,8 @@ class ProductIntegrator implements ProductIntegratorInterface {
+   /**
+    * {@inheritdoc}
+    */
+-  public function syncProductVariant(array $printful_variant, ProductInterface $product, $variation_bundle) {
++  public function syncProductVariant(array $printful_variant, array $variant_parameters, ProductInterface $product, $variation_bundle) {
+     $variationStorage = $this->entityTypeManager->getStorage('commerce_product_variation');
+-    $result = $this->pf->productsVariant($printful_variant['variant_id']);
+-    $variant_parameters = $result['result']['variant'];
+ 
+     $product_variations = $variationStorage->loadByProperties([
+       'printful_reference' => $printful_variant['external_id'],
+diff --git a/src/Service/ProductIntegratorInterface.php b/src/Service/ProductIntegratorInterface.php
+index 25ff8af..d408a3f 100644
+--- a/src/Service/ProductIntegratorInterface.php
++++ b/src/Service/ProductIntegratorInterface.php
+@@ -83,11 +83,13 @@ interface ProductIntegratorInterface {
+    *
+    * @param array $printful_variant
+    *   Printful variant data array as returned by the Printful API.
++   * @param array $variant_parameters
++   *   A array of variant parameters as returned by the Printful API.
+    * @param \Drupal\commerce_product\Entity\ProductInterface $product
+    *   The parent product.
+    * @param string $variation_bundle
+    *   The type of the Commerce product variation that is being synced.
+    */
+-  public function syncProductVariant(array $printful_variant, ProductInterface $product, $variation_bundle);
++  public function syncProductVariant(array $printful_variant, array $variant_parameters, ProductInterface $product, $variation_bundle);
+ 
+ }

@@ -237,6 +237,10 @@ class ProductIntegrator implements ProductIntegratorInterface {
     $variation->price->setValue(new Price($printful_variant['retail_price'], $printful_variant['currency']));
     $variation->printful_reference->printful_id = $printful_variant['external_id'];
 
+    if (isset($variation->commerce_stock_always_in_stock)) {
+      $variation->commerce_stock_always_in_stock->setValue(TRUE);
+    }
+
     // Synchronize mapped variation fields.
     foreach ($this->printfulStore->get('attributeMapping') as $attribute => $field_name) {
       // Image type field.
@@ -265,7 +269,6 @@ class ProductIntegrator implements ProductIntegratorInterface {
 
     $variation->save();
     return $variation;
-
   }
 
   /**
