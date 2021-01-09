@@ -25,6 +25,9 @@ class Printful implements PrintfulInterface {
     'productsVariant' => [
       'path' => 'products/variant',
     ],
+    'products' => [
+      'path' => 'products',
+    ],
     'shippingRates' => [
       'path' => 'shipping/rates',
       'method' => 'POST',

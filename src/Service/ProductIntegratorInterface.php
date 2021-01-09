@@ -83,11 +83,13 @@ interface ProductIntegratorInterface {
    *
    * @param array $printful_variant
    *   Printful variant data array as returned by the Printful API.
+   * @param array $variant_parameters
+   *   A array of variant parameters as returned by the Printful API.
    * @param \Drupal\commerce_product\Entity\ProductInterface $product
    *   The parent product.
    * @param string $variation_bundle
    *   The type of the Commerce product variation that is being synced.
    */
-  public function syncProductVariant(array $printful_variant, ProductInterface $product, $variation_bundle);
+  public function syncProductVariant(array $printful_variant, array $variant_parameters, ProductInterface $product, $variation_bundle);
 
 }

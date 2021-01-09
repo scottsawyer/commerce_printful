@@ -174,11 +174,19 @@ class ProductIntegrator implements ProductIntegratorInterface {
 
     // Get product data including variants.
     $result = $this->pf->syncProducts('@' . $printful_id);
+    $sync_variants = $result['result']['sync_variants'];
+    $printful_product_id = $sync_variants[0]['product']['product_id'];
+    // Get product variants.
+    $variant_data = $this->pf->products($printful_product_id);
 
     $variations = [];
     $variation_bundle = $this->entityTypeManager->getStorage('commerce_product_type')->load($product->bundle())->getVariationTypeId();
-    foreach ($result['result']['sync_variants'] as $printful_variant) {
-      $variation = $this->syncProductVariant($printful_variant, $product, $variation_bundle);
+    foreach ($sync_variants as $printful_variant) {
+      // Get required params from $variant_data.
+      $variant_params = array_filter($variant_data['result']['variants'], function ($variant) use ($printful_variant) {
+        return ($variant['id'] == $printful_variant['product']['variant_id']);
+      });
+      $variation = $this->syncProductVariant($printful_variant, $variant_params, $product, $variation_bundle);
       $variations[$variation->id()] = $variation;
     }
     $product->setVariations($variations);
@@ -196,10 +204,8 @@ class ProductIntegrator implements ProductIntegratorInterface {
   /**
    * {@inheritdoc}
    */
-  public function syncProductVariant(array $printful_variant, ProductInterface $product, $variation_bundle) {
+  public function syncProductVariant(array $printful_variant, array $variant_parameters, ProductInterface $product, $variation_bundle) {
     $variationStorage = $this->entityTypeManager->getStorage('commerce_product_variation');
-    $result = $this->pf->productsVariant($printful_variant['variant_id']);
-    $variant_parameters = $result['result']['variant'];
 
     $product_variations = $variationStorage->loadByProperties([
       'printful_reference' => $printful_variant['external_id'],
@@ -231,10 +237,6 @@ class ProductIntegrator implements ProductIntegratorInterface {
     $variation->price->setValue(new Price($printful_variant['retail_price'], $printful_variant['currency']));
     $variation->printful_reference->printful_id = $printful_variant['external_id'];
 
-    if (isset($variation->commerce_stock_always_in_stock)) {
-      $variation->commerce_stock_always_in_stock->setValue(TRUE);
-    }
-
     // Synchronize mapped variation fields.
     foreach ($this->printfulStore->get('attributeMapping') as $attribute => $field_name) {
       // Image type field.
@@ -263,6 +265,7 @@ class ProductIntegrator implements ProductIntegratorInterface {
 
     $variation->save();
     return $variation;
+
   }
 
   /**
